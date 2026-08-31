@@ -620,6 +620,36 @@ def check_trigger_parity(root: Path) -> None:
         )
 
 
+def check_base_branch(root: Path) -> None:
+    """The default branch is DETECTED, never assumed.
+
+    `main` was hardcoded in a dozen places across the merge and the deploy poller --
+    `base = "origin/main"`, and a merge that refused any PR whose base was not
+    literally "main". On a repository using `master` or `develop`, this product
+    installed cleanly, audited green, and could never merge anything. That is the
+    worst shape a bug can take in something whose pitch is "install it into your
+    repo".
+    """
+    for name in ("merge.py", "deploy.py", "doctor.py", "dispatch.py"):
+        f = root / "factory" / name
+        if not f.exists():
+            continue
+        body = code_only(f.read_text(encoding="utf-8"))
+        # SINGLE QUOTES, because code_only round-trips through ast.unparse and that
+        # normalises every string literal to single quotes. The first version looked
+        # for the double-quoted forms the source actually contains, matched nothing,
+        # and reported clean against a build with the hardcode put back.
+        for bad in ("'origin/main'", "'main'", "'origin/master'"):
+            if bad in body:
+                fail(
+                    "base branch",
+                    f"factory/{name} hardcodes {bad} -- use config.BASE_BRANCH, which is "
+                    f"read from origin/HEAD, or the factory only works on repos named "
+                    f"the way this one happened to be",
+                )
+                break
+
+
 def main(argv: list[str]) -> int:
     root = HOME / "template"
     if "--repo" in argv:
@@ -641,6 +671,7 @@ def main(argv: list[str]) -> int:
     check_lock_liveness(root)
     check_workflow_state_writes(root)
     check_trigger_parity(root)
+    check_base_branch(root)
 
     fails = [f for f in FINDINGS if f[0] == "FAIL"]
     warns = [f for f in FINDINGS if f[0] == "warn"]

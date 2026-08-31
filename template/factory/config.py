@@ -277,6 +277,43 @@ HEALTH_MARKERS = _env("FACTORY_HEALTH_MARKERS", "").split()
 # Slower than feels right: a fast loop multiplies the cost of a mistake before you
 # have noticed the mistake.
 INTERVAL_MINUTES = _env_int("FACTORY_INTERVAL_MINUTES", 30)
+def _base_branch() -> str:
+    """The branch everything merges into, DETECTED rather than assumed.
+
+    `main` was hardcoded in a dozen places -- the merge refused any PR whose base was
+    not literally "main", and the deploy poller read `origin/main` or refused. On a
+    repository using `master`, or `develop`, or a release branch, this product
+    installed cleanly, audited green, and could never merge anything.
+
+    `origin/HEAD` is what the remote itself says its default is, which is the only
+    answer that is not a guess. The fallbacks exist for a clone that never set it.
+    """
+    import subprocess as _sp
+
+    override = _env("FACTORY_BASE_BRANCH", "")
+    if override:
+        return override
+    try:
+        p_ = _sp.run(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=30,
+        )
+        if p_.returncode == 0 and p_.stdout.strip():
+            return p_.stdout.strip().split("/", 1)[-1]
+        for candidate in ("main", "master"):
+            p_ = _sp.run(
+                ["git", "rev-parse", "--verify", "--quiet", f"origin/{candidate}"],
+                cwd=str(ROOT), capture_output=True, text=True, timeout=30,
+            )
+            if p_.returncode == 0:
+                return candidate
+    except (OSError, _sp.SubprocessError):
+        pass
+    return "main"
+
+
+BASE_BRANCH = _base_branch()
+
 REGRESS_CRON = _env("FACTORY_REGRESS_CRON", "0 6 * * 1")
 TASK_NAME = _env("FACTORY_TASK_NAME", f"darkfactory-{ROOT.name}")
 

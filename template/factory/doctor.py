@@ -305,6 +305,33 @@ def main(argv: list[str]) -> int:
     else:
         r.add(OK, "deployment", f"health asserts {len(config.HEALTH_MARKERS)} marker(s)")
 
+    # --- is this checkout behind what the factory already merged? -------------
+    # THE FACTORY COMMITS TO THE SAME REPOSITORY YOU WORK IN, and it does so while you
+    # are not looking -- that is the entire product. So your working tree goes stale in
+    # a way it never does on a normal project, and the ordinary habit that pairs with
+    # that is `git add -A`.
+    #
+    # Measured here, on this factory: a human commit made 74 seconds after an unattended
+    # merge staged the pre-merge files back over it and wiped the feature and all 106
+    # lines of its tests. The push succeeded. Nothing failed.
+    #
+    # The gates never see it, because the gates gate PULL REQUESTS. The ratchet would
+    # have caught it -- 50 observed against a floor of 56 -- but not until the next
+    # validation or the weekly regression, which is days of a green-looking repository
+    # with a feature silently removed.
+    rc_f, _ = git("fetch", "--quiet", "origin", config.BASE_BRANCH)
+    rc_b, behind = git("rev-list", "--count", f"HEAD..origin/{config.BASE_BRANCH}")
+    if rc_f == 0 and rc_b == 0 and behind.strip().isdigit() and int(behind.strip()) > 0:
+        r.add(
+            FAIL, "checkout is stale",
+            f"{behind.strip()} commit(s) behind origin/{config.BASE_BRANCH} -- the factory "
+            f"has merged work this tree does not have. `git add -A` here commits the "
+            f"old files back over it, and nothing will fail",
+            1,
+        )
+    else:
+        r.add(OK, "checkout is current", f"level with origin/{config.BASE_BRANCH}")
+
     # --- holds waiting on a person -------------------------------------------
     # A hold is neither a failure nor an escalation, so nothing else in this audit
     # would ever mention it -- which makes it the one outcome that can sit unnoticed

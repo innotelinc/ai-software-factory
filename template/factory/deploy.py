@@ -94,10 +94,10 @@ def main(argv: list[str]) -> int:
         print(f"ROLLED_BACK to={previous}")
         return 0
 
-    git("fetch", "--quiet", "origin", "main")
-    rc, sha = git("rev-parse", "--short", "origin/main")
+    git("fetch", "--quiet", "origin", config.BASE_BRANCH)
+    rc, sha = git("rev-parse", "--short", f"origin/{config.BASE_BRANCH}")
     if rc != 0:
-        print("DEPLOY_REFUSED: cannot read origin/main")
+        print(f"DEPLOY_REFUSED: cannot read origin/{config.BASE_BRANCH}")
         return 1
 
     # --- no-op when nothing changed ------------------------------------------

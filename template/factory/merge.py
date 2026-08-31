@@ -89,15 +89,15 @@ def main(argv: list[str]) -> int:
     if pr["_state"] != "passed":
         return refuse(f"state is '{pr['_state']}', not 'passed'")
 
-    rc, _ = git("fetch", "--quiet", "origin", "main", branch)
+    rc, _ = git("fetch", "--quiet", "origin", config.BASE_BRANCH, branch)
     if rc != 0:
         # A branch already deleted server-side, or a fetch that cannot see it, is
         # not a merge we should guess at.
-        rc2, _ = git("fetch", "--quiet", "origin", "main")
+        rc2, _ = git("fetch", "--quiet", "origin", config.BASE_BRANCH)
         if rc2 != 0:
             return refuse("cannot fetch from origin")
 
-    base = "origin/main"
+    base = f"origin/{config.BASE_BRANCH}"
     head = f"origin/{branch}"
     print(f"MERGE_START branch={branch} base={base} issue={issue}")
 
@@ -152,7 +152,7 @@ def main(argv: list[str]) -> int:
         # a draft on purpose and this is the moment that stops being true.
         state.gh("pr", "ready", num, check=False)
         view["isDraft"] = False
-    if view["baseRefName"] != "main":
+    if view["baseRefName"] != config.BASE_BRANCH:
         return refuse(f"PR #{num} targets '{view['baseRefName']}', not main")
     if view["mergeable"] != "MERGEABLE":
         return refuse(f"GitHub reports mergeable={view['mergeable']}")
@@ -168,7 +168,7 @@ def main(argv: list[str]) -> int:
     if merge_state == "BLOCKED":
         print(
             f"MERGE_REFUSED: GitHub reports mergeStateStatus=BLOCKED on PR #{num}.\n"
-            "  Branch protection on 'main' is refusing this merge -- typically a required\n"
+            "  Branch protection on the base branch is refusing this merge -- typically a required\n"
             "  approving review, or a required status check that has not run. The factory\n"
             "  cannot satisfy either: it has no second human to review, and at level 3 the\n"
             "  merge IS the review.\n"
@@ -210,14 +210,14 @@ def main(argv: list[str]) -> int:
     # from a main that is one merge behind, and the guard's merge base is a commit
     # the remote has already moved past. Nothing errors; the diff just quietly
     # contains someone else's work.
-    git("fetch", "--quiet", "origin", "main")
+    git("fetch", "--quiet", "origin", config.BASE_BRANCH)
     rc, current = git("rev-parse", "--abbrev-ref", "HEAD")
-    if rc == 0 and current == "main":
-        git("merge", "--ff-only", "origin/main")
+    if rc == 0 and current == config.BASE_BRANCH:
+        git("merge", "--ff-only", f"origin/{config.BASE_BRANCH}")
     else:
-        git("update-ref", "refs/heads/main", "origin/main")
-    _, sha = git("rev-parse", "--short", "origin/main")
-    _, landed = git("log", "-1", "--pretty=%s", "origin/main")
+        git("update-ref", f"refs/heads/{config.BASE_BRANCH}", f"origin/{config.BASE_BRANCH}")
+    _, sha = git("rev-parse", "--short", f"origin/{config.BASE_BRANCH}")
+    _, landed = git("log", "-1", "--pretty=%s", f"origin/{config.BASE_BRANCH}")
     if title[:40] in landed:
         print(f"MERGE_VERIFIED subject={landed}")
     else:

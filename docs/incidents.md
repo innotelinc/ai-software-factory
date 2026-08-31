@@ -209,6 +209,46 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### The default branch that was assumed, in a product whose pitch is "install it into your repo"
+
+**What happened.** `main` was a string literal in a dozen places across the merge and
+the deploy poller — `base = "origin/main"`, and a merge that refused any pull request
+whose base was not literally `"main"`.
+
+On a repository using `master`, or `develop`, or a release branch, this installs
+cleanly, the doctor goes green, laps run, pull requests open — and every merge is
+refused, forever, for a reason that reads like a configuration mistake. That is the
+worst shape a bug can take in something sold as "install it into your repo".
+
+**The rule.** `config.BASE_BRANCH`, read from `origin/HEAD` — what the remote itself
+says its default is, which is the only answer that is not a guess — with
+`FACTORY_BASE_BRANCH` to override and `main`/`master` probes as fallbacks. `bin/audit.py`
+fails on a bare `'main'` literal anywhere in the machinery.
+
+### The setting that could never reach an existing install
+
+**What happened.** `BASE_BRANCH` was added to `config.py`, four modules were synced to
+use it, and the sync reported success. The doctor then died:
+
+```
+AttributeError: module 'config' has no attribute 'BASE_BRANCH'
+```
+
+**The cause, and it is structural.** `factory/config.py` is on the sync's NEVER list
+*because* it is the one file you edit — every project-specific value lives there and
+overwriting it would throw them away. The consequence is not obvious until it bites: a
+new setting can never reach an existing install, and the synced code that reads it
+raises at runtime, on whatever path happens to touch it first.
+
+**The rule.** The sync diffs the template's config against the target's and prints the
+settings that are missing, with the code that defines them, for the operator to paste.
+The file stays theirs; it is no longer allowed to be silently incomplete.
+
+**And report what a setting DEPENDS on.** The first version listed
+`BASE_BRANCH = _base_branch()` and nothing else — an instruction to paste a line into a
+file with no `_base_branch` in it, turning an AttributeError into a NameError. A
+setting is not portable without whatever computes it.
+
 ### The armed factory that never re-tested anything
 
 **What happened.** `darkfactory arm` on Windows printed `ARMED`, created the scheduled

@@ -63,6 +63,46 @@ NEVER = {
 }
 
 
+def missing_settings(dest: Path) -> list[tuple[str, str]]:
+    """Settings the template has and this install does not.
+
+    `factory/config.py` is on the NEVER list because it is the one file you edit --
+    every project-specific value lives there, and overwriting it would throw those
+    away. The consequence, which is not obvious until it bites: a new setting can
+    never reach an existing install, and the synced code that reads it raises
+    AttributeError at runtime, on whatever path happens to touch it first.
+
+    Measured here: `BASE_BRANCH` was added, four modules were synced to use it, and
+    the doctor died with `module 'config' has no attribute 'BASE_BRANCH'`. The sync
+    reported success. So the sync now says what to add, and the operator pastes it in
+    -- which keeps the file theirs while refusing to leave it silently incomplete.
+    """
+    import ast as _ast
+
+    def names(path: Path) -> dict:
+        try:
+            tree = _ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            return {}
+        out = {}
+        for node in tree.body:
+            if isinstance(node, _ast.Assign):
+                for tgt in node.targets:
+                    if isinstance(tgt, _ast.Name) and tgt.id.isupper():
+                        out[tgt.id] = _ast.unparse(node)
+            # THE HELPERS TOO. The first version reported only the constant, so the
+            # instruction was to paste `BASE_BRANCH = _base_branch()` into a file with
+            # no `_base_branch` in it -- a fix that produces a NameError instead of an
+            # AttributeError. A setting is not portable without what computes it.
+            elif isinstance(node, _ast.FunctionDef) and node.name.startswith("_"):
+                out[node.name] = _ast.unparse(node)
+        return out
+
+    theirs = names(dest / "factory" / "config.py")
+    ours = names(TEMPLATE / "factory" / "config.py")
+    return [(k, v) for k, v in ours.items() if k not in theirs]
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
@@ -110,6 +150,19 @@ def main(argv: list[str]) -> int:
         print(f"kept (yours)  {rel}")
     print(f"\n{len(changed)} file(s) {'would change' if dry else 'changed'}, "
           f"{len(set(skipped))} left alone")
+
+    gaps = missing_settings(dest)
+    if gaps:
+        print()
+        print("SETTINGS THIS INSTALL IS MISSING -- the synced code reads them and will")
+        print("raise AttributeError without them. factory/config.py is yours, so paste")
+        print("these in rather than having them overwritten:")
+        print()
+        for name, line in gaps:
+            for ln in line.splitlines():
+                print("    " + ln)
+            print()
+        print()
     if not changed:
         print("Nothing to do -- the machinery here already matches the template.")
     return 0
