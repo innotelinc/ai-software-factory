@@ -36,7 +36,18 @@ SYNC = [
     "harness/ci.py",
     "harness/appproc.py",
     "harness/mutations/run.py",
+    ".claude/skills",
 ]
+
+# ADD-ONLY. Installed when missing, NEVER overwritten.
+#
+# These are the personalisation layer. The README's promise is that the node prompts
+# are yours to rewrite, and a sync that quietly replaces a prompt you rewrote breaks
+# exactly that promise -- silently, and first visible as an unattended run doing the
+# thing you thought you had changed. A new prompt still reaches an existing install,
+# because "missing" and "edited" are different questions.
+ADD_ONLY_PREFIXES = (".claude/skills/",)
+ADD_ONLY_CONTAINS = ("/commands/",)
 
 # NEVER. These are the product.
 NEVER = {
@@ -77,6 +88,11 @@ def main(argv: list[str]) -> int:
                 continue
             target = dest / rel
             if target.exists() and filecmp.cmp(f, target, shallow=False):
+                continue
+            if target.exists() and (
+                rel.startswith(ADD_ONLY_PREFIXES) or any(c in rel for c in ADD_ONLY_CONTAINS)
+            ):
+                skipped.append(rel)
                 continue
             changed.append(rel)
             if not dry:
