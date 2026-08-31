@@ -11,6 +11,53 @@ here is a scar.
 
 ## Found while building this factory
 
+### The merge that armed a revert in your checkout, every single time
+
+**The worst one here, and it left no error behind.**
+
+**What happened.** After an unattended merge, `git status` in the main checkout showed
+the merged work as **staged deletions**. The index and the working tree still held the
+commit *before* the merge, while `HEAD` had moved to the merge itself. Any `git commit`
+in that state — by a human, for any reason — commits a revert of what just landed.
+
+It did. A `git add -A && git commit` 74 seconds after a merge wiped a feature and 106
+lines of its tests. The push succeeded. Nothing failed. I diagnosed it as my own bad
+habit, wrote it up that way, and only found the real cause when the *same desync*
+appeared after the next merge — with my hands nowhere near it.
+
+**The cause.**
+
+```python
+if current == BASE_BRANCH:  git("merge", "--ff-only", ...)   # safe, almost never taken
+else:                       git("update-ref", "refs/heads/main", "origin/main")
+```
+
+`update-ref` moves a branch pointer and touches neither the index nor the working tree.
+When nothing has that branch checked out, that is exactly right. **The main checkout
+always has the base branch checked out.** And `merge.py` runs from a validation
+worktree, where the current branch is the validation branch — so the `else` was taken
+on *every* merge, and the safe branch above essentially never ran.
+
+**The rule.** Ask who has the branch checked out (`git worktree list --porcelain`,
+which is the only source that knows about the checkout this process is not running
+in), and fast-forward it **in its own checkout** so ref, index and files move together.
+`git merge --ff-only` refuses when that tree has local changes, and refusing is the
+right answer: leaving somebody's edits alone is strictly better than desynchronising
+their repository behind their back. `update-ref` only when the branch is checked out
+nowhere.
+
+**Two things generalise.**
+
+First: **a habit that triggers a trap is not the cause of the trap.** The first write-up
+of this blamed `git add -A` and shipped a doctor check for a stale checkout. That check
+is worth having, but it was treating a symptom, and it would have gone on treating it.
+
+Second: unknown takes the safe path. If the worktree list cannot be read,
+`worktree_holding` returns the main checkout rather than `""` — because being wrong
+that way prints a note, and being wrong the other way silently arms a revert.
+
+
+
 These are from the build itself — the first laps against a real repository, a real
 GitHub, and a real workflow engine.
 

@@ -71,6 +71,28 @@ def refuse(msg: str) -> int:
     return 1
 
 
+def worktree_holding(branch: str) -> str:
+    """The path of the working tree that has `branch` checked out, or "".
+
+    Asked so that nothing ever moves a ref out from under a checkout. `git worktree
+    list --porcelain` reports every attached tree including the main one, which is
+    the only source that knows about the checkout this process is not running in.
+    """
+    rc, out = git("worktree", "list", "--porcelain")
+    if rc != 0:
+        # Unknown, so assume it IS checked out somewhere: the cost of being wrong that
+        # way is a checkout left behind, which prints a note. The other way silently
+        # arms a revert.
+        return str(config.SHARED)
+    path = ""
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):].strip()
+        elif line.strip() == f"branch refs/heads/{branch}":
+            return path
+    return ""
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
@@ -212,8 +234,41 @@ def main(argv: list[str]) -> int:
     # contains someone else's work.
     git("fetch", "--quiet", "origin", config.BASE_BRANCH)
     rc, current = git("rev-parse", "--abbrev-ref", "HEAD")
+    # NEVER `update-ref` A BRANCH THAT IS CHECKED OUT. This is the most damaging bug
+    # found in this build, and it left no error behind.
+    #
+    # `update-ref` moves the branch pointer and touches neither the index nor the
+    # working tree. When nothing has that branch checked out, that is exactly right.
+    # When something does -- and the main checkout always has the base branch checked
+    # out -- HEAD jumps to the merge while the index and the files stay on the commit
+    # before it. `git status` in that checkout then reports the merged work as
+    # STAGED DELETIONS, and the next `git commit` there, by anyone, for any reason,
+    # commits a revert of the merge that just landed.
+    #
+    # That happened: a `git add -A && git commit` 74 seconds after an unattended merge
+    # wiped a feature and 106 lines of its tests, and the push succeeded. I blamed the
+    # habit. The habit was the trigger; this line was the trap, and it was armed after
+    # every single merge.
+    #
+    # This code runs from a validate WORKTREE, where the current branch is the
+    # validation branch -- so the `else` was taken every time, and the safe branch
+    # above almost never ran.
+    holder = worktree_holding(config.BASE_BRANCH)
     if rc == 0 and current == config.BASE_BRANCH:
         git("merge", "--ff-only", f"origin/{config.BASE_BRANCH}")
+    elif holder:
+        # Fast-forward it IN ITS OWN CHECKOUT, which moves ref, index and files
+        # together. It refuses when that tree has local changes, and refusing is the
+        # right answer: leaving someone's edits is strictly better than desynchronising
+        # their repository behind their back.
+        rc_ff, out_ff = git("-C", holder, "merge", "--ff-only", f"origin/{config.BASE_BRANCH}")
+        if rc_ff != 0:
+            print(
+                f"MERGE_NOTE: {config.BASE_BRANCH} is checked out at {holder} and could "
+                f"not be fast-forwarded ({out_ff.strip().splitlines()[-1] if out_ff.strip() else 'no output'}). "
+                f"That checkout is now BEHIND the merge -- run `git pull` there before "
+                f"committing anything. Its ref was left alone on purpose"
+            )
     else:
         git("update-ref", f"refs/heads/{config.BASE_BRANCH}", f"origin/{config.BASE_BRANCH}")
     _, sha = git("rev-parse", "--short", f"origin/{config.BASE_BRANCH}")

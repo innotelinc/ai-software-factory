@@ -495,6 +495,47 @@ def duplication_checks() -> None:
         state._list, state.linked_issue = real_list, real_linked
 
 
+# --- never move a ref out from under a checkout ------------------------------
+
+def refmove_checks() -> None:
+    """`update-ref` on a checked-out branch arms a revert in that checkout.
+
+    It moves the pointer and touches neither index nor working tree, so HEAD jumps to
+    the merge while the files stay on the commit before it. `git status` there then
+    reports the merged work as STAGED DELETIONS, and the next `git commit` -- by
+    anyone, for any reason -- commits a revert of the merge that just landed.
+
+    It happened, and it cost a feature and 106 lines of tests. The merge runs from a
+    validation worktree, where the current branch is the validation branch, so the
+    unsafe path was taken on every single merge.
+    """
+    import merge as merge_mod  # noqa: PLC0415
+
+    src = (Path(__file__).resolve().parent / "merge.py").read_text(encoding="utf-8")
+    # THE ASSIGNMENT, not the name. The first version looked for "worktree_holding("
+    # anywhere in the file -- which the function's own `def` line satisfies. A build
+    # with `holder = ""` hardcoded, taking the unsafe path every time, passed it.
+    check("merge asks who has the base branch checked out",
+          "holder = worktree_holding(config.BASE_BRANCH)" in src,
+          "nothing would stop it moving a ref under a live working tree")
+    check("and fast-forwards that checkout instead of moving its ref",
+          '"-C", holder, "merge", "--ff-only"' in src.replace("'", '"'),
+          "ref, index and files must move together or they come apart")
+
+    marker = "def worktree_holding("
+    body = src[src.find(marker):]
+    nxt = body.find("\ndef ", 1)
+    if nxt > 0:
+        body = body[:nxt]
+    check("an unreadable worktree list is treated as 'checked out somewhere'",
+          "return str(config.SHARED)" in body,
+          "unknown must take the safe path; the other way silently arms a revert")
+
+    here = merge_mod.worktree_holding("definitely-not-a-branch-here")
+    check("a branch nothing has checked out reports nowhere", here == "",
+          "reported " + repr(here) + ", so update-ref would never run and refs go stale")
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     with tempfile.TemporaryDirectory() as td:
@@ -507,6 +548,7 @@ def main() -> int:
     write_safety_checks()
     deploy_checks()
     duplication_checks()
+    refmove_checks()
 
     if FAILURES:
         if not quiet:

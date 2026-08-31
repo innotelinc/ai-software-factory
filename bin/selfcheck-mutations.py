@@ -69,6 +69,10 @@ DEFECTS = [
     ("an issue with a live PR becomes work again", "factory/state.py",
      '    issues = [i for i in issues if i["_target"] not in answered]',
      '    issues = list(issues)', True),
+    ("merge moves a checked-out ref again", "factory/merge.py",
+     "    holder = worktree_holding(config.BASE_BRANCH)", "    holder = ''", True),
+    ("an unreadable worktree list is treated as safe", "factory/merge.py",
+     "        return str(config.SHARED)", "        return ''", True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already
