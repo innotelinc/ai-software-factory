@@ -113,6 +113,49 @@ def lock_checks(tmp: Path) -> None:
             {"id": run_id, "status": "completed"}]})
         check("a lock carrying no run id is left to the age reaper", lk.exists())
         lk.unlink(missing_ok=True)
+
+        # --- the reaper, and whose pid is on the lock -------------------------
+        # DISPATCH IS DETACHED, so the recorded pid dies in seconds while the run
+        # has twenty minutes left. The first reaper tested "pid gone AND older than
+        # GRACE" and its docstring said a live lap is never touched because its pid
+        # is alive -- false for every dispatch this system makes. An implement lap
+        # ran nine minutes, its lock was reaped at five, and the sweep escalated it
+        # as dead while it went on to open a pull request.
+        import os
+        import time as _time
+
+        aged = _time.time() - (config.LOCK_GRACE_MINUTES + 5) * 60
+
+        held = config.LOCKS_RUNTIME / "implement-gh-issue-7.lock"
+        held.unlink(missing_ok=True)
+        assert dispatch.acquire(held)
+        with held.open("a", encoding="utf-8") as fh:
+            fh.write("run " + run_id + "\n")
+        held.write_text(
+            "999999 2020-01-01T00:00:00+00:00\nrun " + run_id + "\n", encoding="utf-8"
+        )
+        os.utime(held, (aged, aged))
+        dispatch.reap_locks()
+        check("an aged lock naming a run survives a dead dispatching pid", held.exists(),
+              "every lap longer than the grace period would be reaped and escalated")
+
+        orphan = config.LOCKS_RUNTIME / "implement-gh-issue-6.lock"
+        orphan.write_text("999999 2020-01-01T00:00:00+00:00\n", encoding="utf-8")
+        os.utime(orphan, (aged, aged))
+        dispatch.reap_locks()
+        check("an aged lock naming NO run is still reaped", not orphan.exists(),
+              "a dispatch that died before recording a run id would wedge capacity")
+
+        ancient = config.LOCKS_RUNTIME / "implement-gh-issue-5.lock"
+        ancient.write_text(
+            "999999 2020-01-01T00:00:00+00:00\nrun " + run_id + "\n", encoding="utf-8"
+        )
+        very_old = _time.time() - (config.LOCK_STALE_MINUTES + 5) * 60
+        os.utime(ancient, (very_old, very_old))
+        dispatch.reap_locks()
+        check("the stale cap still frees a lock the engine can no longer be asked about",
+              not ancient.exists())
+        held.unlink(missing_ok=True)
     finally:
         config.LOCKS_RUNTIME = original
         dispatch.log = original_log

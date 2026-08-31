@@ -55,6 +55,8 @@ DEFECTS = [
      '            state.set_state(target, "passed")', True),
     ("the deploy gate stops requiring markers", "factory/deploy.py",
      "    if not config.HEALTH_MARKERS:", "    if False:", True),
+    ("the reaper consults the pid on a lock that names a run", "factory/dispatch.py",
+     "        if lock_run_id(lock):", "        if False:", True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already

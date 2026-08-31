@@ -166,18 +166,29 @@ def pid_alive(pid: int) -> bool:
 def reap_locks() -> None:
     """Reap dead locks BEFORE counting capacity.
 
-    THE WEDGE THIS REMOVES, and it is the most likely one on a real machine. The
-    lock is released when the dispatch finishes. It is NOT released when the process
-    is KILLED: a reboot, the machine sleeping, a power cut, someone closing the
-    terminal, the OOM killer. The lock file then survives its owner, counts toward
-    capacity forever, and every subsequent tick logs "at capacity, nothing
-    dispatched" and exits 0 -- indistinguishable from a factory with nothing to do,
-    which is the one failure mode this whole system exists to avoid.
+    THE WEDGE THIS REMOVES, and it is the most likely one on a real machine. The lock
+    is released when the run settles. It is NOT released when the process is KILLED:
+    a reboot, the machine sleeping, a power cut, someone closing the terminal, the
+    OOM killer. The lock file then survives its owner, counts toward capacity
+    forever, and every subsequent tick logs "at capacity, nothing dispatched" and
+    exits 0 -- indistinguishable from a factory with nothing to do.
 
-    Two tests, and BOTH must hold before an early reap, because PIDs are reused: the
-    owning process is gone, AND the lock has had GRACE minutes to become real. A
-    live long lap is never touched, because its PID is alive -- that is the check
-    that matters, and age is only the fallback for when the PID cannot be read.
+    THE PID ON THE LOCK IS NOT THE RUN'S PID, and this is the whole subtlety.
+    Dispatch is detached: `archon workflow run` hands the work to a child and returns
+    in seconds, so the recorded pid is dead almost immediately while the run has
+    another twenty minutes to go. The first version of this reaped on "pid gone AND
+    older than GRACE", and its docstring said a live lap is never touched because its
+    pid is alive. That sentence was false for every dispatch this system makes: an
+    implement lap ran nine minutes, its lock was reaped at five, and the reconcile
+    sweep escalated it as dead while it went on to finish and open a pull request.
+
+    So the pid test applies to exactly one case: a lock with NO run id, meaning the
+    dispatch died before it could record one. There the pid IS the only owner there
+    ever was.
+
+    A lock that names a run is freed by evidence about THAT RUN -- release_settled_
+    locks() asking the engine -- or by the long stale cap, which is the backstop for
+    an engine that can no longer be asked.
     """
     config.LOCKS_RUNTIME.mkdir(parents=True, exist_ok=True)
     now = time.time()
@@ -187,14 +198,26 @@ def reap_locks() -> None:
             first = lock.read_text(encoding="utf-8", errors="replace").splitlines()[0]
         except (OSError, IndexError):
             continue
+
         if age_min > config.LOCK_STALE_MINUTES:
-            log(f"LOCK_REAPED {lock.name} - older than {config.LOCK_STALE_MINUTES}m, so its run is gone. Held since: {first}")
+            log(
+                f"LOCK_REAPED {lock.name} - older than {config.LOCK_STALE_MINUTES}m, so "
+                f"its run is gone. Held since: {first}"
+            )
             lock.unlink(missing_ok=True)
             continue
+
+        if lock_run_id(lock):
+            # Owned by a detached run. Only a report about that run frees it early.
+            continue
+
         if age_min > config.LOCK_GRACE_MINUTES:
             head = first.split(" ")[0]
             if head.isdigit() and not pid_alive(int(head)):
-                log(f"LOCK_REAPED {lock.name} - its process ({head}) is gone and the lock is over {config.LOCK_GRACE_MINUTES}m old")
+                log(
+                    f"LOCK_REAPED {lock.name} - it names no run, its dispatching process "
+                    f"({head}) is gone, and it is over {config.LOCK_GRACE_MINUTES}m old"
+                )
                 lock.unlink(missing_ok=True)
 
 

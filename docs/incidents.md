@@ -173,6 +173,36 @@ identifier; it was a name this code invented and hoped the engine would echo bac
 run id is printed by the dispatch and recorded on the lock, so the question asked is
 about the same object the answer is about.
 
+### The reaper whose docstring explained why it was safe, in a system where that was false
+
+**What happened.** With the lock-release path fixed, an implement lap was escalated as
+dead again — at 5 minutes 39 seconds, while it was running, and it ran on to open a
+pull request. This time the run list was answering correctly: it said `running`. The
+lock was gone anyway.
+
+**The cause.** The *other* reaper. `reap_locks()` frees a lock when "the owning process
+is gone AND the lock is older than GRACE", and its docstring said:
+
+> A live long lap is never touched, because its PID is alive — that is the check that
+> matters, and age is only the fallback for when the PID cannot be read.
+
+**That sentence is false for every dispatch this system makes.** Dispatch is detached:
+`archon workflow run` hands the work to a child and returns in seconds, so the recorded
+pid is dead almost immediately while the run has another twenty minutes to go. The pid
+test never protects anything. `GRACE` was the only thing standing between a live lap
+and the reaper, and almost every implement lap is longer than five minutes.
+
+**The rule.** The pid on the lock is the *dispatching* process, not the run. It is
+meaningful for exactly one case: a lock that names **no run**, meaning the dispatch
+died before it could record one — there the pid is the only owner there ever was. A
+lock that names a run is freed by evidence about *that run*, or by the long stale cap,
+which is the backstop for an engine that can no longer be asked.
+
+**The general one is about the comment, not the code.** A docstring asserting the
+property that makes something safe is worth more than most tests — right up until the
+system changes underneath it and nothing re-reads it. This one described a foreground
+dispatch. The code had been detached for a long time.
+
 ### The machinery that had a harness for everything except itself
 
 **What happened.** The bug above lived in the file whose entire job is deciding what is
