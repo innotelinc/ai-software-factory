@@ -224,6 +224,12 @@ COPY_PLAN = [
     ("factory", "factory"),
     ("harness", "harness"),
     (".archon/workflows/darkfactory", ".archon/workflows/darkfactory"),
+    # The interactive half of the same loop. Each skill POINTS AT the workflow's
+    # command file rather than restating it, so rewriting a node prompt changes what
+    # you get by hand too -- and the two can never quietly disagree. A copy would
+    # first show its drift as an unattended run doing something you thought you had
+    # already changed.
+    (".claude/skills", ".claude/skills"),
     (".factory/holdout/run.py", ".factory/holdout/run.py"),
     (".factory/locks/floor.json", ".factory/locks/floor.json"),
 ]

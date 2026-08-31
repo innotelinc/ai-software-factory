@@ -45,7 +45,7 @@ factory and its scars are expensive to rediscover.
 
 | # | Component | What ships | What is yours |
 |---|-----------|-----------|---------------|
-| 1 | **Workflow-driven repo** | five Archon workflows: triage · implement · validate · fix · regress | the node prompts — your process, with the approvals removed |
+| 1 | **Workflow-driven repo** | five Archon workflows: triage · implement · validate · fix · regress, plus `/factory-*` skills that run the same steps by hand | the node prompts — your process, with the approvals removed |
 | 2 | **The trigger** | a dumb, deterministic dispatcher on a timer | the interval, and when you turn it on |
 | 3 | **Deployment** | a poll-build-healthcheck-swap skeleton | how your thing actually ships |
 | 4 | **Guidance layer** | `FACTORY_RULES.md`, nearly complete | `MISSION.md` — what this is and must never become |
@@ -222,6 +222,8 @@ template/              what init copies in
   factory/_selftest.py the harness for that runtime, run by `doctor`
   harness/             component 5's plumbing. Every assertion in it is yours to write
   .archon/workflows/   the five workflows, their prompts and their scripts
+  .claude/skills/      the same loop, by hand -- each points at the node prompt
+                       above rather than copying it
   MISSION.md           yours
   FACTORY_RULES.md     nearly complete
 docs/                  the longer explanations
