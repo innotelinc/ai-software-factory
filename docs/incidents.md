@@ -209,6 +209,25 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### The race that was finally run, by accident
+
+**What happened.** Two dispatcher loops ran against the same repository for
+forty-five minutes, because an earlier one was never stopped. Every unit of work was
+dispatched exactly once — triage, validation and the merge by one loop, the
+implementation by the other, no duplicates and no overlap.
+
+**Why it is worth writing down.** The O_EXCL lock exists for precisely this, and
+nothing had ever tested it. `acquire()` uses `O_CREAT | O_EXCL` rather than
+`if not exists: write` because the latter is a time-of-check-to-time-of-use race that
+is entirely reachable — a tick that outlives the cron interval, or a human running the
+dispatcher while the schedule fires. That argument was sound and completely
+unevidenced until two loops collided by mistake.
+
+**The lesson is about the evidence, not the lock.** Every other guarantee in this
+system was tested by deliberately breaking something. This one was tested by an
+accident, which is the only reason it has any evidence at all — and it is worth asking,
+of every remaining "this cannot happen because", whether anything has ever made it try.
+
 ### The closing keyword that was formatted as code
 
 **What happened.** A lap finished perfectly: PR merged, issue labelled `factory:done`.
