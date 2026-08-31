@@ -1,0 +1,287 @@
+"""The deterministic audit. `darkfactory doctor` runs this.
+
+    python factory/doctor.py            report
+    python factory/doctor.py --level 3  can this repo run at level 3?
+
+A CHECKLIST, not a test suite. It is meant to fail loudly on a fresh install --
+that is it working, and working through it is the build.
+
+The one property that makes it worth having: IT BLOCKS THE DIAL. Level 2 needs a
+real E2E; level 3 needs a holdout, a mutation set and a ratchet. So "build for
+level 3" cannot quietly become "switch on level 3" before the evidence exists.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import config  # noqa: E402
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
+# A scaffold marker still present means the check is green about somebody else's
+# product, which is worse than no check at all.
+SCAFFOLD_MARKER = "SCAFFOLD_EXAMPLE_DELETE_THIS_LINE_WHEN_YOU_WRITE_YOUR_OWN"
+
+OK, WARN, FAIL = "ok", "warn", "FAIL"
+
+
+class Report:
+    def __init__(self) -> None:
+        self.rows: list[tuple[str, str, str, int]] = []
+
+    def add(self, status: str, name: str, detail: str = "", blocks_level: int = 99) -> None:
+        self.rows.append((status, name, detail, blocks_level))
+
+    def max_level(self) -> int:
+        """The highest dial this repo has earned. Evidence, not intention."""
+        blocked = [lvl for status, _, _, lvl in self.rows if status == FAIL]
+        return (min(blocked) - 1) if blocked else 5
+
+    def render(self, want: int | None) -> int:
+        width = max(len(n) for _, n, _, _ in self.rows) + 2
+        for status, name, detail, lvl in self.rows:
+            mark = {OK: "  ok  ", WARN: " warn ", FAIL: " FAIL "}[status]
+            gate = f"  (blocks level {lvl}+)" if status == FAIL and lvl < 99 else ""
+            print(f"[{mark}] {name.ljust(width)}{detail}{gate}")
+        ceiling = self.max_level()
+        fails = sum(1 for s, _, _, _ in self.rows if s == FAIL)
+        warns = sum(1 for s, _, _, _ in self.rows if s == WARN)
+        print()
+        print(f"{len(self.rows)} checks, {fails} failing, {warns} warnings")
+        print(f"HIGHEST EARNED AUTONOMY LEVEL: {ceiling}   (configured: {config.AUTONOMY})")
+        if config.AUTONOMY > ceiling:
+            print()
+            print(
+                f"REFUSED: the dial is at {config.AUTONOMY} and the evidence supports "
+                f"{ceiling}. Fix the failing checks above, or lower FACTORY_AUTONOMY. "
+                f"A dial that outruns its evidence is the failure this whole system "
+                f"exists to prevent."
+            )
+            return 1
+        if want is not None and want > ceiling:
+            print()
+            print(f"REFUSED: level {want} needs the failing checks above to pass first.")
+            return 1
+        return 0
+
+
+def has(path: Path) -> bool:
+    return path.exists() and (path.is_dir() or path.stat().st_size > 0)
+
+
+def contains_scaffold(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        return SCAFFOLD_MARKER in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def git(*args: str) -> tuple[int, str]:
+    p = subprocess.run(
+        ["git", *args], cwd=str(config.ROOT), capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=60,
+    )
+    return p.returncode, p.stdout.strip()
+
+
+def main(argv: list[str]) -> int:
+    want = None
+    if "--level" in argv:
+        want = int(argv[argv.index("--level") + 1])
+
+    r = Report()
+    root = config.ROOT
+
+    # --- the engine ----------------------------------------------------------
+    if shutil.which(config.ARCHON_BIN):
+        rc, out = 0, ""
+        try:
+            p = subprocess.run(
+                [config.ARCHON_BIN, "version"], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=60,
+            )
+            out = (p.stdout or "").splitlines()[0] if p.stdout else ""
+        except (OSError, subprocess.SubprocessError, IndexError):
+            out = ""
+        r.add(OK, "archon", out or "installed")
+    else:
+        r.add(FAIL, "archon", f"{config.ARCHON_BIN} not on PATH -- run `darkfactory init`", 1)
+
+    if shutil.which("gh"):
+        rc, _ = 0, ""
+        p = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=60)
+        r.add(OK if p.returncode == 0 else FAIL, "gh authenticated",
+              "" if p.returncode == 0 else "run `gh auth login`", 1)
+    else:
+        r.add(FAIL, "gh", "not on PATH -- the state machine, the gate and the merge all use it", 1)
+
+    rc, remote = git("remote", "get-url", "origin")
+    r.add(OK if rc == 0 else FAIL, "origin remote", remote if rc == 0 else "none -- labels are the state machine", 1)
+
+    # --- the guidance layer --------------------------------------------------
+    for name in ("MISSION.md", "FACTORY_RULES.md"):
+        p = root / name
+        if not has(p):
+            r.add(FAIL, name, "missing", 1)
+        elif "<" in p.read_text(encoding="utf-8", errors="replace") and re.search(
+            r"<[A-Z][A-Za-z -]{3,}>", p.read_text(encoding="utf-8", errors="replace")
+        ):
+            r.add(FAIL, name, "still contains <PLACEHOLDER> text", 1)
+        else:
+            r.add(OK, name, f"{len(p.read_text(encoding='utf-8', errors='replace').splitlines())} lines")
+
+    conventions = next((root / n for n in ("CLAUDE.md", "AGENTS.md") if has(root / n)), None)
+    r.add(OK if conventions else WARN, "conventions file",
+          conventions.name if conventions else "no CLAUDE.md / AGENTS.md")
+
+    mission = (root / "MISSION.md").read_text(encoding="utf-8", errors="replace") if has(root / "MISSION.md") else ""
+    out_of_scope = len(re.findall(r"^\s*[-*]\s+\S", mission.split("Out of scope")[-1].split("##")[0], re.M)) if "Out of scope" in mission else 0
+    if out_of_scope >= 5:
+        r.add(OK, "out-of-scope list", f"{out_of_scope} entries")
+    else:
+        r.add(
+            WARN, "out-of-scope list",
+            f"{out_of_scope} entries -- fewer than five is too thin. Without it every "
+            f"plausible feature request is arguably in scope, and the factory builds all of them",
+        )
+
+    # --- the harness ---------------------------------------------------------
+    e2e = root / "harness" / "e2e.py"
+    if not has(e2e):
+        r.add(FAIL, "harness/e2e.py", "missing -- there is no end-to-end path", 2)
+    elif contains_scaffold(e2e):
+        r.add(FAIL, "harness/e2e.py", "still the scaffold's example journey", 2)
+    else:
+        r.add(OK, "harness/e2e.py", "yours")
+
+    holdout = root / ".factory" / "holdout" / "run.py"
+    if not has(holdout):
+        r.add(
+            FAIL, "holdout", "no .factory/holdout/run.py -- NOTHING sits above the "
+            "independence line, so every check is one the builder could read and "
+            "iterate against", 3,
+        )
+    elif contains_scaffold(holdout):
+        r.add(FAIL, "holdout", "still the scaffold's example scenarios", 3)
+    else:
+        r.add(OK, "holdout", "yours")
+
+    defects = root / "harness" / "mutations" / "defects.json"
+    if not has(defects):
+        r.add(FAIL, "mutation set", "no defects.json -- this gate has never been shown to fail", 3)
+    else:
+        try:
+            spec = json.loads(defects.read_text(encoding="utf-8"))
+            n = len(spec.get("defects", []))
+        except (OSError, ValueError):
+            n = 0
+        if contains_scaffold(defects) or n == 0:
+            r.add(FAIL, "mutation set", f"{n} defects -- a gate that has never failed is a gate nobody has tested", 3)
+        elif n < 5:
+            r.add(WARN, "mutation set", f"{n} defects -- six or seven is a real set")
+        else:
+            r.add(OK, "mutation set", f"{n} defects")
+
+    floor = config.FLOOR_FILE
+    if not has(floor):
+        r.add(WARN, "ratchet floor", "no .factory/locks/floor.json -- counts are reported but not enforced")
+    else:
+        try:
+            keys = {k: v for k, v in json.loads(floor.read_text(encoding="utf-8")).items()
+                    if isinstance(v, int) and not k.startswith("_")}
+        except (OSError, ValueError):
+            keys = {}
+        live = {k: v for k, v in keys.items() if v > 0}
+        if not live:
+            r.add(FAIL, "ratchet floor", "every floor is 0 -- coverage can silently fall to nothing", 3)
+        else:
+            r.add(OK, "ratchet floor", " ".join(f"{k}={v}" for k, v in live.items()))
+
+    # --- gates that must be code ---------------------------------------------
+    for name, path, level in (
+        ("gate is code", root / "factory" / "gate.py", 3),
+        ("merge is code", root / "factory" / "merge.py", 3),
+        ("guard is code", root / "factory" / "guard.py", 1),
+        ("tripwire", root / "factory" / "tripwire.py", 3),
+    ):
+        r.add(OK if has(path) else FAIL, name, "" if has(path) else "missing", level)
+
+    if "APP_STARTED" in config.REQUIRED_MARKERS and "E2E_PASSED" in config.REQUIRED_MARKERS:
+        r.add(OK, "required markers", " ".join(config.REQUIRED_MARKERS))
+    else:
+        r.add(
+            FAIL, "required markers",
+            "APP_STARTED and E2E_PASSED are not negotiable -- they are the two gates "
+            "that must be code in every factory", 2,
+        )
+
+    # --- secrets -------------------------------------------------------------
+    unignored = []
+    for name in config.SECRET_FILES:
+        rc, _ = git("check-ignore", "-q", name)
+        if rc != 0:
+            unignored.append(name)
+    if unignored:
+        r.add(
+            FAIL, "secrets ignored",
+            "NOT gitignored: " + " ".join(unignored) + " -- a commit step would publish these", 1,
+        )
+    else:
+        r.add(OK, "secrets ignored", f"{len(config.SECRET_FILES)} patterns")
+
+    rc, _ = git("check-ignore", "-q", ".factory/runs")
+    r.add(OK if rc == 0 else WARN, ".factory/runs ignored",
+          "" if rc == 0 else "builder artifacts would be committed")
+
+    # --- the workflow pack ---------------------------------------------------
+    pack = root / ".archon" / "workflows" / "darkfactory"
+    found = sorted(p.stem for p in pack.rglob("*.yaml")) if pack.exists() else []
+    expected = {
+        "darkfactory-triage", "darkfactory-implement", "darkfactory-validate",
+        "darkfactory-fix", "darkfactory-regress",
+    }
+    missing_wf = sorted(expected - set(found))
+    r.add(OK if not missing_wf else FAIL, "workflow pack",
+          f"{len(found)} workflows" if not missing_wf else "missing: " + " ".join(missing_wf), 1)
+
+    # --- the escalation channel ----------------------------------------------
+    if config.NOTIFY_CMD:
+        r.add(OK, "escalation channel", config.NOTIFY_CMD[:60])
+    else:
+        r.add(
+            FAIL, "escalation channel",
+            "FACTORY_NOTIFY_CMD unset -- needs-human would wait in a file nobody opens. "
+            "Unattended then quietly means unmonitored", 3,
+        )
+
+    # --- the stop button ------------------------------------------------------
+    r.add(OK, "stop button", f"{config.STOP_FILE.name} + the {config.STOP_LABEL} label")
+
+    # --- the trigger ----------------------------------------------------------
+    # A fully built factory with nothing scheduled audits identically to a running
+    # one, so this is the check that tells them apart.
+    armed = config.TRIGGER_FILE.exists()
+    if config.AUTONOMY >= 1 and not armed:
+        r.add(WARN, "trigger armed", "nothing scheduled -- the factory only runs when you run it")
+    else:
+        r.add(OK, "trigger armed", "scheduled" if armed else "not needed at level 0")
+
+    return r.render(want)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

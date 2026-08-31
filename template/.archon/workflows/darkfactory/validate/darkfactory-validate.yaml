@@ -1,0 +1,178 @@
+name: darkfactory-validate
+description: |
+  Judge ONE pull request against the issue it claims to fix, independently, and let
+  code decide what happens next: merge, hold, request changes, or reject.
+
+  Use when: the dispatcher finds a PR labelled factory:needs-review. By hand:
+    archon workflow run darkfactory-validate --branch factory/val-14 "validate gh:pr:14"
+  NOT for: implementing (darkfactory-implement), fixing findings
+  (darkfactory-fix), or the scheduled regression (darkfactory-regress).
+
+  =====================================================================
+  THE HOLDOUT — the one design constraint everything else serves
+  =====================================================================
+
+  The validator must NEVER see the builder's plan, notes, or reasoning. It judges
+  the OUTCOME (the diff, the running app, the checks it ran itself) against the
+  CONTRACT (the issue as filed, plus governance read from the BASE branch). That is
+  the only honest reason to merge code nobody read.
+
+  Enforced in six overlapping layers, because a sentence in a prompt is not
+  enforcement:
+
+   1. SEPARATE RUN, SEPARATE WORKTREE, SEPARATE CONTEXT. The builder's artifacts are
+      not on disk here because they were never written here.
+   2. NARROW FETCHES. The PR is fetched WITHOUT comments, reviews or commit bodies.
+      Excluding the coder's chatter at the fetch layer means it cannot reach the
+      judge even by accident.
+   3. GOVERNANCE FROM THE BASE BRANCH, read BEFORE the PR is checked out. A PR must
+      not be able to weaken the rulebook it is about to be judged against, and any
+      diff touching a governance file is rejected before anything else is evaluated.
+   4. NO TOOLS ON THE JUDGE. It cannot go looking. Everything it may consider is in
+      its prompt.
+   5. A TRIPWIRE that fails loudly if a builder artifact is present anyway. It
+      should be impossible; the failure it guards against is silent by construction,
+      so it is checked regardless.
+   6. THE GATE OVERRIDES THE JUDGE. When the raw markers and the verdict disagree,
+      the raw output wins. A model summarising its own run is precisely what cannot
+      be trusted at this step.
+
+model: medium
+
+inputs:
+  target:
+    default: ""
+    description: >-
+      The pull request to validate, as gh:pr:<n>. When empty, it is parsed out of
+      the run's trigger message.
+
+returns: apply
+
+nodes:
+  - id: resolve
+    script: resolve-target
+    runtime: uv
+    with:
+      declared: "$INPUTS.target"
+      kind: pr
+    output_format:
+      type: object
+      properties:
+        target: { type: string }
+        number: { type: string }
+      required: [target, number]
+
+  # Fetch narrowly, read governance from the base FIRST, rebase if the base moved,
+  # check the branch out, trip the wire, and only then claim the PR by moving it to
+  # `validating`. Everything downstream assumes a validation owns it.
+  - id: prepare
+    script: prepare
+    runtime: uv
+    depends_on: [resolve]
+    timeout: 600000
+    with:
+      target: "$resolve.output.target"
+    output_format:
+      type: object
+      properties:
+        target: { type: string }
+        number: { type: string }
+        issue: { type: string }
+        branch: { type: string }
+        base: { type: string }
+      required: [target, number, issue, branch, base]
+
+  # The guard runs against the branch under review and writes the FIRST lines of the
+  # gate log, because PROTECTED_OK is one of the required markers. A protected-path
+  # violation short-circuits everything: it is an auto-reject with no fix attempt.
+  #
+  # It runs the guard THIS checkout has, against the branch's tree. A branch cut
+  # before a guard fix would otherwise run the old, broken guard on itself -- the
+  # same principle as reading governance from the base branch, applied to the code
+  # that does the enforcing rather than to the rules it enforces.
+  - id: gate-run
+    script: run-gate
+    runtime: uv
+    depends_on: [prepare]
+    timeout: 2400000
+    with:
+      target: "$prepare.output.target"
+      base: "$prepare.output.base"
+    output_format:
+      type: object
+      properties:
+        markers_present: { type: boolean }
+        exit_code: { type: integer }
+        summary: { type: string }
+      required: [markers_present, exit_code, summary]
+
+  # Everything the judge may see, composed into one document and SUBSTITUTED into
+  # its prompt. The judge has no tools -- that is the mechanism -- so it cannot read
+  # a file, and a prompt that tells it to is asking a node to do something it cannot.
+  # See scripts/brief.py: that exact mistake cost a pull request.
+  - id: brief
+    script: brief
+    runtime: uv
+    depends_on: [gate-run]
+    trigger_rule: all_done
+
+  # --- THE JUDGE -----------------------------------------------------------
+  # Fresh context. NO TOOLS. Everything it may consider is in the prompt, handed to
+  # it by `brief`. The inability to go looking is the point.
+  - id: judge
+    command: judge
+    context: fresh
+    depends_on: [brief]
+    allowed_tools: []
+    output_format:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum: [approve, request_changes, reject]
+        solves_issue:
+          type: string
+          # QUOTED, and it is not style. YAML 1.1 parses bare `yes` and `no` as
+          # BOOLEANS, so this enum loaded as [True, "partially", False] -- a schema
+          # demanding a boolean for a field declared `type: string`. The judge dutifully
+          # produced something that satisfied the contradiction and said nothing useful:
+          # summary "test", one finding "test issue", after two and a half minutes of
+          # real work. Nothing errored anywhere.
+          enum: ["yes", "partially", "no"]
+        summary: { type: string }
+        issues_to_fix:
+          type: array
+          items:
+            type: object
+            properties:
+              severity: { type: string, enum: [critical, high, medium, low] }
+              category:
+                type: string
+                enum: [correctness, scope, observability, invariant, security, test, style]
+              file: { type: string }
+              line: { type: string }
+              description: { type: string }
+            required: [severity, category, description]
+        rules_cited:
+          type: array
+          items: { type: string }
+      required: [verdict, solves_issue, summary, issues_to_fix, rules_cited]
+
+  # --- THE GATE ------------------------------------------------------------
+  # factory/gate.py reads the RAW markers and the verdict and merges only when both
+  # agree. When they disagree the raw output wins and the PR escalates. It also
+  # holds the auto-merge -- without failing anything -- on a recorded assumption, an
+  # uncalibrated threshold, or ratchet slack.
+  - id: apply
+    script: apply-verdict
+    runtime: uv
+    depends_on: [judge]
+    trigger_rule: all_done
+    with:
+      # From RESOLVE, not from prepare. A FAILED producer fails the binding outright
+      # -- `trigger_rule: all_done` does not rescue it -- so binding the target to
+      # prepare meant that when prepare died, this node could not run either, and the
+      # one thing that reports an infrastructure failure was the thing that could not
+      # report. resolve is a pure parse and effectively never fails.
+      target: "$resolve.output.target"
+      verdict: { from: "$judge.output", if_skipped: "" }

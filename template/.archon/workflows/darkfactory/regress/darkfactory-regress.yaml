@@ -1,0 +1,124 @@
+name: darkfactory-regress
+description: |
+  Run the full gate against main on a schedule, and file an issue for anything that
+  broke. This is the node that closes the self-healing loop.
+
+  Use when: the weekly trigger fires, or after N merges. By hand:
+    archon workflow run darkfactory-regress --branch factory/regress "regress"
+  NOT for: per-PR validation (darkfactory-validate).
+
+  =====================================================================
+  WHY THIS EXISTS -- the loop that closes without a human noticing first
+  =====================================================================
+
+  regression finds a break in merged code -> files an issue with evidence ->
+  triage accepts it -> implement opens a PR -> validate holds it out -> merge.
+  No human in the loop unless all of that fails.
+
+  Per-PR validation only ever sees one branch at a time. The failures it cannot see
+  are the ones that need two merges to appear: two changes that are individually
+  correct and wrong together, an assumption one PR made that the next quietly broke,
+  and anything that only shows up on a cold start. Those are exactly the failures a
+  scheduled full run against main catches.
+
+  UNLIKE THE VALIDATOR, THIS IS NOT BOUND BY THE HOLDOUT. It runs against main,
+  which is already-merged code, so there is nothing to hold out from. It can read
+  anything and run anything. Its only output is "did this still work when I
+  exercised it?"
+
+  IT NEVER FILES AN ISSUE IT CANNOT PROVE. If the harness itself failed to run --
+  a missing dependency, a port collision, a checkout that did not complete -- the
+  run reports that and files NOTHING. A factory that spams its own backlog with
+  bogus product bugs when it cannot prove its own test harness ran is worse than a
+  factory that stayed quiet.
+
+model: medium
+
+inputs:
+  scope:
+    default: ""
+    description: >-
+      Optional narrowing -- a named check or area to focus on. Empty means the
+      project's full gate.
+
+returns: file-issues
+
+nodes:
+  # Snap this checkout to origin/main's tip WITHOUT flipping HEAD onto the `main`
+  # branch: git refuses to have one branch checked out in two worktrees at once, and
+  # the main clone legitimately holds it. Fetch plus hard reset gives the same file
+  # content with none of that.
+  - id: sync
+    script: sync-main
+    runtime: uv
+    timeout: 300000
+    output_format:
+      type: object
+      properties:
+        sha: { type: string }
+        subject: { type: string }
+      required: [sha, subject]
+
+  - id: suite
+    script: run-suite
+    runtime: uv
+    depends_on: [sync]
+    timeout: 3000000
+    output_format:
+      type: object
+      properties:
+        green: { type: boolean }
+        harness_ran: { type: boolean }
+        failed_step: { type: string }
+        summary: { type: string }
+      required: [green, harness_ran, failed_step, summary]
+
+  # Only when the harness genuinely ran AND went red. A skipped harness is an infra
+  # failure, and turning that into "product bugs" is how a backlog fills with fiction.
+  - id: diagnose
+    command: diagnose
+    context: fresh
+    depends_on: [suite]
+    when: "$suite.output.green == false"
+    # PROVEN BY PROBE, in both directions, before being believed:
+    #   allowed_tools: ["Bash(python:*)"]   grants NOTHING -- the node has NO shell.
+    #   allowed_tools: [Bash]               grants a shell.
+    #   denied_tools:  ["Bash(git:*)"]      genuinely blocks it.
+    # So the grant is coarse and the leash is the DENY. The first version scoped the
+    # grant instead, and the build nodes ran for weeks with no shell at all: they
+    # could not run the quick gate, said so politely in prose, and exited 0.
+    allowed_tools: [Read, Glob, Grep, Write, Bash]
+    # THE HOLDOUT DENY, and it is NOT redundant here even though the regression is
+    # otherwise exempt from the holdout rule. This node writes ISSUE BODIES, and an
+    # issue body is read by the builder later. A diagnose node that can read
+    # .factory/holdout/ can quote an assertion into an issue -- and the wall is gone
+    # by a route nobody was watching. Found by bin/audit.py.
+    denied_tools: ["Read(.factory/holdout/**)", "Glob(.factory/holdout/**)", "Grep(.factory/holdout/**)"]
+    output_format:
+      type: object
+      properties:
+        infrastructure_failure: { type: boolean }
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              severity: { type: string, enum: [critical, high, medium, low] }
+              area: { type: string }
+              body: { type: string }
+              suspect_commits: { type: string }
+            required: [title, severity, area, body]
+        summary: { type: string }
+      required: [infrastructure_failure, findings, summary]
+
+  - id: file-issues
+    script: file-issues
+    runtime: uv
+    depends_on: [suite, diagnose]
+    trigger_rule: all_done
+    with:
+      green: "$suite.output.green"
+      harness_ran: "$suite.output.harness_ran"
+      sha: "$sync.output.sha"
+      diagnosis: { from: "$diagnose.output", if_skipped: "" }

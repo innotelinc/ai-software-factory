@@ -1,0 +1,29 @@
+# Appended to your .gitignore by `darkfactory init`.
+
+# darkfactory: runtime state, never committed
+.factory/runs/
+.factory/locks-runtime/
+.factory/findings/
+.factory/needs-human.md
+.factory/escalations.log
+.factory/trigger.json
+.factory/deployed.json
+.factory/deploy-history.log
+.factory/STOP
+.factory/assumptions/
+.factory/followups/
+
+# Secrets. THE PRE-FLIGHT REFUSES TO START while any of these is unignored, and that
+# refusal is the point: an empty `git check-ignore` result means the next run that
+# commits publishes your key. On a public repo that is publication, not a mistake you
+# can take back -- rotating afterwards is the cleanup, not the fix.
+#
+# Being unable to EDIT a protected file does not stop a broad `git add` from
+# committing one that appears for the first time next month, which is why this list
+# is separate from the protected list and checked before every committing workflow.
+.env
+.env.*
+!.env.example
+*.pem
+secrets.json
+credentials.json
