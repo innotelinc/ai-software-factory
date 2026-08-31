@@ -156,8 +156,10 @@ floor requires, which is exactly how many assertions could be deleted with the g
 still green.
 
 **A hold is a state, not a message.** The PR gets `factory:held`, which nothing
-dispatches and no node may leave — a human raises the floor or accepts the
-assumptions, and the next validation produces no hold. The first version wrote the
+dispatches and no node may leave — `darkfactory accept <target>` archives the
+assumptions and sends it back to `open`, so the merge still happens through a full
+validation rather than by skipping one. Agreeing with a judgement is not the same as
+skipping the gate that acts on it. The first version wrote the
 explanation into a comment and set the PR to `passed`; the dispatcher merged it
 forty-five seconds later, because `passed` is what a mergeable PR is called.
 
@@ -172,6 +174,7 @@ darkfactory status        # what is in flight, what the dial is, what needs a hu
 darkfactory run implement gh:issue:4    # one lap, by hand, watching
 darkfactory level 1       # raise the dial (refused without the evidence)
 darkfactory arm           # install the schedule (refused below level 1)
+darkfactory accept gh:pr:11   # agree with a held PR's recorded assumptions
 darkfactory halt          # the stop button
 ```
 

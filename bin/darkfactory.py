@@ -5,6 +5,7 @@
     darkfactory doctor          audit it; refuses a dial the evidence does not support
     darkfactory tick            one dispatcher pass (what the schedule calls)
     darkfactory run <wf> <tgt>  dispatch one workflow by hand
+    darkfactory accept <tgt>    agree with a held PR's recorded assumptions
     darkfactory level [N]       read or set the autonomy dial
     darkfactory arm | disarm    install or remove the schedule
     darkfactory halt | resume   the stop button
@@ -621,6 +622,87 @@ def cmd_resume(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_accept(args: argparse.Namespace) -> int:
+    """Agree with the calls the factory made, and send the PR back to be revalidated.
+
+    THE HALF OF THE HOLD THAT WAS MISSING. The gate holds a merge on recorded
+    assumptions, and the assumptions live in a file it re-reads every run -- so
+    without this, a held PR holds again on the next validation, and again, forever. A
+    hold nobody can clear is not a hold, it is a stall with good manners.
+
+    Accepting ARCHIVES rather than deletes. What the factory chose, and the fact that
+    a person agreed on a date, is the record of how a decision got made -- and it is
+    the thing you will want when the same question comes back in three months.
+
+    It does NOT merge. It sends the PR back to `open`, so the merge still happens
+    through a full validation of the tree as it stands. Agreeing with a judgement is
+    not the same as skipping the gate that acts on it.
+    """
+    root = repo_root()
+    sys.path.insert(0, str(root / "factory"))
+    import config  # type: ignore  # noqa: E402
+    import state  # type: ignore  # noqa: E402
+
+    target = args.target
+    try:
+        item = state.fetch(target)
+    except Exception as e:  # noqa: BLE001
+        die(f"cannot read {target}: {e}")
+        return 1
+
+    if item["_state"] != "held":
+        warn(f"{target} is '{item['_state']}', not 'held'. Nothing to accept.")
+        return 1
+
+    issue = state.linked_issue(target) if item["_kind"] == "pr" else None
+    archived = []
+    dest_dir = config.ASSUMPTIONS_DIR / "accepted"
+    for key in (target, issue):
+        if not key:
+            continue
+        src = config.ASSUMPTIONS_DIR / f"{key.replace(':', '-')}.txt"
+        if not src.exists() or not src.stat().st_size:
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dest = dest_dir / f"{src.stem}-{stamp}.txt"
+        header = (
+            "# ACCEPTED " + datetime.now(timezone.utc).isoformat() + " for " + target
+            + ((" (note: " + args.note + ")") if args.note else "")
+            + "\n# A person read these and agreed. Archived, not deleted: what was chosen"
+            + "\n# and the fact that somebody signed off is the record of how it was decided."
+            + "\n\n"
+        )
+        dest.write_text(header + src.read_text(encoding="utf-8", errors="replace"),
+                        encoding="utf-8")
+        src.unlink()
+        archived.append(dest.name)
+
+    if not archived:
+        step("no recorded assumptions to accept -- the hold was on something else")
+
+    try:
+        state.set_state(target, "open")
+    except Exception as e:  # noqa: BLE001
+        die(f"accepted the assumptions but could not move {target} back to 'open': {e}")
+        return 1
+
+    say()
+    for name in archived:
+        step(f"archived      .factory/assumptions/accepted/{name}")
+    step(f"{target} is back to 'open'")
+    say()
+    say("  It is NOT merged. The next validation runs against the tree as it stands,")
+    say("  and merges only if that run is green -- agreeing with a judgement is not")
+    say("  the same as skipping the gate that acts on it.")
+    say()
+    say("  If the hold also named ratchet slack, raise the floor in "
+        ".factory/locks/floor.json")
+    say("  and commit it, or the next run holds again for that reason.")
+    say()
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     root = repo_root()
     sys.path.insert(0, str(root / "factory"))
@@ -665,8 +747,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         say()
         say(f"  held for you ({len(held)}) -- green, waiting for you to agree:")
         for tgt in held:
-            say(f"    {tgt}  (read the gate comment, then: python factory/state.py "
-                f"set {tgt} state=open to revalidate)")
+            say(f"    {tgt}  -- read the gate comment, then: darkfactory accept {tgt}")
 
     if config.NEEDS_HUMAN.exists():
         lines = [ln for ln in config.NEEDS_HUMAN.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
@@ -684,6 +765,11 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"darkfactory {VERSION}")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    a = sub.add_parser("accept", help="agree with a held PR's recorded assumptions")
+    a.add_argument("target", help="e.g. gh:pr:11")
+    a.add_argument("--note", default="", help="why you agreed, for the archive")
+    a.set_defaults(fn=cmd_accept)
 
     i = sub.add_parser("init", help="install the factory into this repo")
     i.add_argument("--yes", "-y", action="store_true", help="do not ask before installing the engine")

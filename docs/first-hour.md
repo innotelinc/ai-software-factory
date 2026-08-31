@@ -175,9 +175,15 @@ the person who already knew.
 dispatches and no node may leave; `darkfactory status` names it on its own line. The
 first version of this posted the explanation as a PR comment and set the PR to
 `passed` — the dispatcher merged it forty-five seconds later, because `passed` is what
-a mergeable PR is called. When you clear a hold, you do it by raising the floor or
-accepting the assumptions and then `state=open`, which sends it back for a fresh
-validation rather than merging the judgement you were holding.
+a mergeable PR is called. When you clear a hold you run `darkfactory accept <target>`, which archives the
+assumptions and sends the PR back to `open` for a fresh validation rather than merging
+the judgement you were holding. Raise the floor in the same sitting if slack was named
+too, or the next run holds again for that reason.
+
+**The accept path shipped a version after the hold did, and the gap is instructive:**
+the gate re-reads the assumptions file every run, so a held PR held again on the next
+validation, and the next. A hold nobody can clear is not a hold, it is a stall — and it
+looks exactly like a factory with nothing to do.
 
 ---
 

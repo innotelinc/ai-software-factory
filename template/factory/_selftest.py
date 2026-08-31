@@ -347,6 +347,14 @@ def enforcement_checks() -> None:
         check("the gate writes held rather than passed when it holds",
               'state.set_state(target, "held")' in gate_src,
               "the hold would be a comment and the next tick would merge it")
+        # A HOLD NOBODY CAN CLEAR IS A STALL. The gate re-reads the assumptions file
+        # every run, so without an accept path a held PR holds again on the next
+        # validation, and the next, forever. The hold shipped before its other half
+        # did, and the stall would have looked like a factory with nothing to do.
+        gate_reads = "ASSUMPTIONS_DIR" in gate_src
+        cli = (Path(__file__).resolve().parent.parent / "factory" / "doctor.py")
+        check("the gate holds on a file it re-reads every run", gate_reads)
+
         merge_src = (Path(__file__).resolve().parent / "merge.py").read_text(encoding="utf-8")
         check("merge refuses any state that is not exactly passed",
               """if pr["_state"] != "passed":""" in merge_src,

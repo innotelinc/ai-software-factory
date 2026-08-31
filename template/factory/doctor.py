@@ -22,7 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import config  # noqa: E402
+import config
+import state  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -303,6 +304,19 @@ def main(argv: list[str]) -> int:
               "passes that", 3)
     else:
         r.add(OK, "deployment", f"health asserts {len(config.HEALTH_MARKERS)} marker(s)")
+
+    # --- holds waiting on a person -------------------------------------------
+    # A hold is neither a failure nor an escalation, so nothing else in this audit
+    # would ever mention it -- which makes it the one outcome that can sit unnoticed
+    # while the factory reports itself perfectly healthy.
+    try:
+        held_prs = [p_["_target"] for p_ in state._list("prs", "held")]
+    except Exception:  # noqa: BLE001
+        held_prs = []
+    if held_prs:
+        r.add(WARN, "held for you",
+              " ".join(held_prs) + " -- green and waiting for you to agree "
+              "(`darkfactory accept <target>`)")
 
     # --- the stop button ------------------------------------------------------
     r.add(OK, "stop button", f"{config.STOP_FILE.name} + the {config.STOP_LABEL} label")
