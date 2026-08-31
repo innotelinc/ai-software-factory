@@ -241,6 +241,10 @@ COPY_PLAN = [
 # file everybody skips, and what gets skipped with it is the record of WHY the dial is
 # where it is. Six months on, that record is the difference between a decision and a
 # setting nobody has touched.
+# Directories the repository owns, where install means "add what is missing"
+# rather than "take the whole directory or leave it alone".
+MERGE_DIRS = {".claude/skills"}
+
 GOVERNANCE = ["MISSION.md", "FACTORY_RULES.md", "FACTORY.md"]
 
 GITIGNORE_LINES = (
@@ -292,6 +296,32 @@ def cmd_init(args: argparse.Namespace) -> int:
         src, dst = TEMPLATE / src_rel, root / dst_rel
         if not src.exists():
             continue
+
+        # MERGE, DO NOT SKIP, where the destination is a shared directory.
+        #
+        # `.claude/skills/` belongs to the repository, not to this tool. Treating it
+        # as one unit means a repo that already has a single skill of its own gets
+        # NONE of the factory's -- silently, with a line saying "kept", which reads
+        # like the right thing happened. Almost every repo worth installing this into
+        # already has that directory.
+        #
+        # Per-entry, so an existing `factory-plan` you have edited is still yours.
+        if src.is_dir() and dst_rel in MERGE_DIRS and dst.exists() and not args.force:
+            added = []
+            for entry in sorted(src.iterdir()):
+                target = dst / entry.name
+                if target.exists():
+                    skipped.append(f"{dst_rel}/{entry.name}")
+                    continue
+                if entry.is_dir():
+                    shutil.copytree(entry, target)
+                else:
+                    shutil.copy2(entry, target)
+                added.append(entry.name)
+            if added:
+                copied.append(f"{dst_rel}/ ({len(added)}: " + " ".join(added) + ")")
+            continue
+
         if dst.exists() and not args.force:
             skipped.append(dst_rel)
             continue
