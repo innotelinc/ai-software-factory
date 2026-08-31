@@ -169,6 +169,15 @@ darkfactory arm           # install the schedule (refused below level 1)
 darkfactory halt          # the stop button
 ```
 
+And the three that check the factory rather than your software. Run them after editing
+anything under `factory/`:
+
+```bash
+python factory/_selftest.py         # the machinery's own invariants (doctor runs it too)
+python bin/audit.py --repo .        # cross-file invariants no single file can check
+python bin/selfcheck-mutations.py   # and: would the self-test know if they broke?
+```
+
 ---
 
 ## What it costs, honestly
