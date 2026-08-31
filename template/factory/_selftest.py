@@ -347,6 +347,11 @@ def enforcement_checks() -> None:
         check("the gate writes held rather than passed when it holds",
               'state.set_state(target, "held")' in gate_src,
               "the hold would be a comment and the next tick would merge it")
+        merge_src = (Path(__file__).resolve().parent / "merge.py").read_text(encoding="utf-8")
+        check("merge refuses any state that is not exactly passed",
+              """if pr["_state"] != "passed":""" in merge_src,
+              "the second line of defence for the hold, and for a stale read of any "
+              "kind -- merge.py does not trust that the gate already decided")
 
         at("open")
         before = len(writes)
