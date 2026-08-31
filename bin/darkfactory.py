@@ -603,7 +603,17 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     try:
         action, target, reason = state.next_action()
-        say(f"  next          {action} {target}  ({reason})")
+        # SAY THE SAME THING THE DISPATCHER WOULD. `next_action` reads labels and
+        # knows nothing about locks, so mid-lap it reports the honest label state --
+        # "in-progress with no PR" -- which reads as a stall on a screen that just
+        # said a run holds that exact target two lines above. The dispatcher already
+        # skips it for this reason; the status must not contradict itself.
+        held = {p.stem for p in locks}
+        target_key = target.replace(":", "-")
+        if any(lk.endswith(target_key) for lk in held):
+            say(f"  next          waiting -- {target} is mid-lap ({reason})")
+        else:
+            say(f"  next          {action} {target}  ({reason})")
     except Exception as e:  # noqa: BLE001
         say(f"  next          unavailable: {e}")
 
