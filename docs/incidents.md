@@ -198,6 +198,78 @@ first draft of the self-test used the second form, so it configured a copy of th
 it believed it was testing. Every call succeeded and three assertions came back false
 for a reason that had nothing to do with the code under test.
 
+### The transition table that governed only the callers that asked
+
+**What happened.** A validation claimed a pull request that had been escalated to
+`needs-human` three minutes earlier, moved it to `validating`, and ran. The table says
+`needs-human` reaches nothing, and it is the one guarantee written as absolute:
+*a node may never move an item out of needs-human.*
+
+**Two causes, and both had to be fixed.**
+
+The enforcement lived in `state.py`'s **command line wrapper**. Eleven callers import
+`set_state` and call the function directly — the gate, the merge, the dispatcher — and
+every one of them was governed by nothing. The guarantee was opt-in and read as
+absolute.
+
+And the check that did run compared against labels the node had read **at the start of
+its work**. The escalation happened after that read. No table can fix a decision made
+from data that predates the write.
+
+**The rule.** Enforce at the write. `set_state` fetches at the moment it writes, which
+is the latest anything can know, and refuses there — so the wrapper and the eleven
+importers get the same answer. `force=True` exists for exactly one thing: parking at
+`needs-human`, which must be allowed from anywhere, because an escalation a table
+lookup can block is not an escalation.
+
+**And the dispatcher must not dispatch what it just escalated.** GitHub does not
+promise you read your own write. A tick escalated a PR at 19:21:55 and re-dispatched it
+at 19:22:03, eight seconds later, straight back into the state a human had just been
+told to look at. `escalate()` now returns every target it parked — the linked issue
+included — and the tick excludes them.
+
+### The judge that was thrown away for a word
+
+**What happened.** `error_max_structured_output_retries` — five attempts, fifty-two
+seconds of judging, and the run died. `apply` binds to `$judge.output`, a binding never
+falls back to `if_skipped` for a *failed* producer, so the one node whose job is to
+report an infrastructure failure could not run. A live worktree left behind, a human
+paged, and no record of what the judge actually said.
+
+**The rule.** **Constrain only what is branched on.** `factory/gate.py` reads exactly
+one field to decide anything: `verdict`. `severity` and `category` reach the PR comment
+through `f.get('severity', '?')` and change nothing. Every enum on a field nobody
+branches on is a fresh chance *per finding* to fail the whole run for a synonym — eight
+of them on a five-finding review. The vocabulary belongs in the prompt, where being off
+it costs a slightly worse comment instead of a dead validation.
+
+`verdict` keeps its enum, because a value outside that list has no defined behaviour
+and must fail loudly. `issues_to_fix` and `rules_cited` stopped being required: a clean
+approval has no findings and invokes no rule, and demanding an empty array as proof of
+that is a fifth way to fail.
+
+### Aimed at a rung, landed on another
+
+**What happened.** The mutation set reported 10/10 with defects "aimed at" four rungs.
+Two of them were being caught by the **unit** suite: the app-start defect broke a
+module-level import that every unit test hits, and the e2e defect flipped a 409 to a
+400 that `tests/` asserts directly. Both target rungs were still rungs nobody had ever
+seen go red, and the score said nothing was wrong.
+
+**The rule.** The runner reports **which rung caught each defect**, and that column is
+the point. Aiming is not landing. A defect aimed at e2e must be invisible to the unit
+suite or it measures the unit suite twice.
+
+**And re-aiming found a weak assertion**, which is the part worth keeping. The new e2e
+defect replaced the balances table with a bare div and **escaped**: step 1 asked whether
+`<table` appeared anywhere in the page, two other tables were still in the markup, and
+the check passed while the one screen the product exists for showed nothing.
+
+That is the holdout's "balances sum to zero" failure exactly, one level up: **a property
+that holds for a subset is not a check on the whole.** It appears wherever a check is
+written as "something like this exists" rather than "this specific thing is here", and
+the only thing that finds it is a defect aimed at that rung.
+
 ## Inherited from the factory this one was built from
 
 These were paid for by an earlier experiment. They are not hypothetical either.

@@ -164,12 +164,154 @@ def state_checks() -> None:
               if s not in labelless and s not in state.LABEL_FOR_STATE)))
 
 
+# --- the dial and the checks it makes load-bearing ----------------------------
+
+def marker_checks() -> None:
+    """At level 3 nobody reads the diff, so the two checks that justify that must be
+    required to have RUN. A holdout that quietly stops running -- renamed, crashed on
+    import, skipped by a bad path -- otherwise leaves a green gate, which is exactly
+    the failure the marker list exists to prevent, aimed at the one check the whole
+    arrangement rests on.
+
+    Asked in a subprocess because the answer depends on the environment config was
+    imported under, and this process already imported it once.
+    """
+    import os
+    import subprocess
+
+    here = str(Path(__file__).resolve().parent)
+    probe = ("import sys; sys.path.insert(0, r'" + here + "'); "
+             "import config; print(' '.join(config.REQUIRED_MARKERS))")
+
+    def markers_at(level: int) -> set:
+        env = {**os.environ, "FACTORY_AUTONOMY": str(level)}
+        out = subprocess.run([sys.executable, "-c", probe], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace",
+                             env=env, timeout=60)
+        return set((out.stdout or "").split())
+
+    low, high = markers_at(2), markers_at(3)
+    for m in ("PROTECTED_OK", "APP_STARTED", "E2E_PASSED", "GATE_OK"):
+        check("marker " + m + " is required at every level", m in low)
+    for m in ("HOLDOUT_PASSED", "MUTATIONS_OK"):
+        check("marker " + m + " becomes required at level 3", m in high,
+              "an unreviewed merge could pass without it having run")
+    check("the level-3 set is a superset of the level-2 set", low <= high,
+          "raising the dial must never remove a requirement")
+
+
+# --- what a tick escalated, it must not then dispatch ------------------------
+
+def escalation_checks() -> None:
+    """An escalation writes a label to GitHub and the queue is read back from GitHub
+    seconds later. GitHub does not promise you read your own write, and it did not: a
+    validation was parked at needs-human and re-dispatched eight seconds later, back
+    into the state a human had just been told to look at.
+
+    `escalate()` must therefore report every target it parked -- the linked issue
+    included -- so the caller can exclude them for the rest of the tick. Checked
+    against the source, because calling it would mutate a real repository.
+    """
+    src = (Path(__file__).resolve().parent / "dispatch.py").read_text(encoding="utf-8")
+    check("escalate() reports what it parked",
+          "def escalate(target: str, why: str) -> set[str]:" in src,
+          "a caller cannot exclude targets it is never told about")
+    check("the reconcile sweep collects them",
+          "escalated_here |= escalate(" in src)
+    check("and seeds the dispatch exclusions with them",
+          "exclude: set[str] = set(escalated_here)" in src,
+          "the sweep would park a target and the loop would dispatch it anyway")
+    check("in-loop escalations exclude too",
+          src.count("exclude |= escalate(") >= 2,
+          "the fix cap and the merge refusal park a target mid-tick as well")
+    check("escalate parks with force",
+          src.count('"needs-human", force=True') >= 2,
+          "an escalation that the transition table can refuse is not an escalation -- "
+          "and a merged PR or an already-parked item reaches needs-human from nowhere")
+
+
+# --- the table must be enforced where the writes are ------------------------
+
+def enforcement_checks() -> None:
+    """A transition table that only the CLI consults governs the CLI.
+
+    Eleven callers import `set_state` and call it directly -- the gate, the merge,
+    the dispatcher. While the check lived in a wrapper around the function, every one
+    of them was ungoverned, and the guarantee read as absolute in the docs.
+
+    Exercised for real: a fake `fetch` puts an item in a state, and the move is
+    attempted. No network, no GitHub.
+    """
+    original_fetch = state.fetch
+    original_gh = state.gh
+    writes: list = []
+    state.gh = lambda *a, **k: writes.append(a) or ""
+    try:
+        def at(current_state: str):
+            state.fetch = lambda t: {
+                "_state": current_state, "_labels": [], "_kind": "pr",
+                "_target": t, "state": "OPEN",
+            }
+
+        at("needs-human")
+        try:
+            state.set_state("gh:pr:1", "validating")
+            check("a node cannot claim an item parked at needs-human", False,
+                  "the write went through; the escalation guarantee is decorative")
+        except state.IllegalTransition:
+            check("a node cannot claim an item parked at needs-human", True)
+
+        # Park from `merged`, which reaches NOTHING in the table -- so this only
+        # passes if `force` is genuinely exempt. Parking from needs-human proves
+        # nothing: old == new short-circuits the check before force is consulted,
+        # and a build with force removed entirely sailed through that version.
+        at("merged")
+        before = len(writes)
+        try:
+            state.set_state("gh:pr:1", "needs-human", force=True)
+            check("parking is always allowed, from a state that reaches nothing",
+                  len(writes) > before)
+        except state.IllegalTransition:
+            check("parking is always allowed, from a state that reaches nothing", False,
+                  "an escalation a table lookup can block is not an escalation")
+
+        at("validating")
+        before = len(writes)
+        state.set_state("gh:pr:1", "passed")
+        check("a legal move still goes through", len(writes) > before)
+
+        at("passed")
+        try:
+            state.set_state("gh:pr:1", "validating")
+            check("passed cannot be re-claimed for validation", False,
+                  "two validations would hold one PR")
+        except state.IllegalTransition:
+            check("passed cannot be re-claimed for validation", True)
+
+        at("open")
+        before = len(writes)
+        state.set_state("gh:pr:1", "open")
+        check("re-applying the current state is allowed", len(writes) > before,
+              "the labels ARE the state, so a correct state with no label is unreadable")
+    finally:
+        state.fetch = original_fetch
+        state.gh = original_gh
+
+    src = (Path(__file__).resolve().parent / "state.py").read_text(encoding="utf-8")
+    check("the check is inside set_state, not in a wrapper",
+          "raise IllegalTransition(" in src.split("def set_state")[1].split("def ")[0],
+          "a wrapper governs only the callers that use the wrapper")
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     with tempfile.TemporaryDirectory() as td:
         lock_checks(Path(td))
     gate_checks()
     state_checks()
+    marker_checks()
+    escalation_checks()
+    enforcement_checks()
 
     if FAILURES:
         if not quiet:

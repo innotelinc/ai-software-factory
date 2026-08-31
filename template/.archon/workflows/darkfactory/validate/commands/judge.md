@@ -67,6 +67,17 @@ specifically:
 - Does the diff match what the commit subjects claim? A subject saying "fix" over a
   diff that only adds a test is a mismatch worth naming.
 
+Use these words, and nothing else, for a finding's `severity` and `category`:
+
+- `severity`: **critical**, **high**, **medium**, **low**
+- `category`: **correctness**, **scope**, **observability**, **invariant**,
+  **security**, **test**, **style**
+
+The schema no longer rejects a word outside those lists, because it used to reject the
+whole verdict for one -- fifty-two seconds of judging thrown away over a synonym. Being
+off the list now costs a slightly worse PR comment instead of a dead validation, which
+is the right price. Stay on it anyway.
+
 **`request_changes`** — solvable incrementally. List each finding with a severity and
 a `file:line`. Be specific enough that a fix node can act on it **without re-deriving
 your reasoning** — it gets your findings and the issue, and nothing else. "Improve

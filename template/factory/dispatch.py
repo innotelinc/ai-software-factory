@@ -72,13 +72,18 @@ def ledger(target: str, why: str) -> None:
         )
 
 
-def escalate(target: str, why: str) -> None:
-    """Park it, record it, tell someone. All three, or it is not an escalation."""
+def escalate(target: str, why: str) -> set[str]:
+    """Park it, record it, tell someone. All three, or it is not an escalation.
+
+    Returns EVERY target it parked, the linked issue included, so a caller can keep
+    the same tick from dispatching one of them out of a stale read.
+    """
     log(f"ESCALATE {target}: {why}")
+    parked = {target}
     if DRY_RUN:
-        return
+        return parked
     try:
-        state.set_state(target, "needs-human")
+        state.set_state(target, "needs-human", force=True)
     except Exception as e:  # noqa: BLE001
         log(f"  (could not label {target}: {e})")
     ledger(target, why)
@@ -90,11 +95,13 @@ def escalate(target: str, why: str) -> None:
         if target.startswith("gh:pr:"):
             issue = state.linked_issue(target)
             if issue:
-                state.set_state(issue, "needs-human")
+                state.set_state(issue, "needs-human", force=True)
                 ledger(issue, f"its PR {target} escalated: {why}")
+                parked.add(issue)
     except Exception:  # noqa: BLE001
         pass
     log(notify.send(target, why))
+    return parked
 
 
 RUN_ID_RE = re.compile(
@@ -401,13 +408,26 @@ def main() -> int:
     reap_locks()
     held = {p.stem for p in in_flight()}
 
+    # WHAT THIS TICK ESCALATED, so the same tick cannot dispatch it again.
+    #
+    # Escalating writes a label to GitHub and the queue is read back from GitHub
+    # seconds later. GitHub does not promise you read your own write, so the read
+    # can still show the pre-escalation state -- and it did: a validation was
+    # escalated to needs-human at 19:21:55 and re-dispatched at 19:22:03, eight
+    # seconds later, straight back into the state a human was just told to look at.
+    #
+    # `needs-human` being terminal in the transition table does not help here. The
+    # table governs MOVES; this is a stale READ, and no amount of correctness in
+    # state.py can fix a queue answered from data that predates the write.
+    escalated_here: set[str] = set()
+
     if not DRY_RUN:
         for pr in state._list("prs", "validating"):
             key = f"validate-{pr['_target']}".replace(":", "-")
             if key in held:
                 log(f"IN_FLIGHT {pr['_target']} is 'validating' and a run still holds its lock")
                 continue
-            escalate(
+            escalated_here |= escalate(
                 pr["_target"],
                 "left in 'validating' with no run holding it; a validation died between "
                 "the tripwire and the verdict",
@@ -425,7 +445,7 @@ def main() -> int:
                 except Exception:  # noqa: BLE001
                     pass
             if not referenced:
-                escalate(
+                escalated_here |= escalate(
                     issue["_target"],
                     "left in 'in-progress' with no PR record and no run holding it; an "
                     "implement lap died before it opened one",
@@ -459,7 +479,7 @@ def main() -> int:
     # nothing is worse than one that is not offered. Targets that could not be
     # locked are EXCLUDED and the question is asked again, so the priority order
     # still lives entirely in state.py.
-    exclude: set[str] = set()
+    exclude: set[str] = set(escalated_here)
     slots = max(1, config.MAX_PARALLEL - len(running))
 
     while slots > 0:
@@ -487,7 +507,7 @@ def main() -> int:
         slots = 0
 
         if action == "escalate":
-            escalate(target, f"fix-attempt cap reached (FACTORY_RULES 8): {why}")
+            exclude |= escalate(target, f"fix-attempt cap reached (FACTORY_RULES 8): {why}")
 
         elif action == "merge":
             log(f"MERGE {target}")
@@ -511,7 +531,9 @@ def main() -> int:
                 log(f"REQUEUED {target} - the branch was behind base; it will be rebased and re-judged")
             else:
                 # Everything else: merge.py printed the reason and could not recover.
-                escalate(target, "merge refused for a PR that passed every gate; see the log above")
+                exclude |= escalate(
+                    target, "merge refused for a PR that passed every gate; see the log above"
+                )
 
         elif action in ("stalled-pr", "stalled-issue"):
             # Reported by state.py, acted on here -- only the dispatcher holds the

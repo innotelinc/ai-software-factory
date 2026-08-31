@@ -228,7 +228,14 @@ COPY_PLAN = [
     (".factory/locks/floor.json", ".factory/locks/floor.json"),
 ]
 
-GOVERNANCE = ["MISSION.md", "FACTORY_RULES.md"]
+# FACTORY.md is here because the docs keep telling you to write things in it -- the
+# level you are at and the date you reached it, the date you last used the stop button
+# on purpose, what would have to be true to go further, which rung each mutation was
+# aimed at. A file the walkthrough treats as required and `init` does not create is a
+# file everybody skips, and what gets skipped with it is the record of WHY the dial is
+# where it is. Six months on, that record is the difference between a decision and a
+# setting nobody has touched.
+GOVERNANCE = ["MISSION.md", "FACTORY_RULES.md", "FACTORY.md"]
 
 GITIGNORE_LINES = (
     (TEMPLATE / "gitignore-additions.txt").read_text(encoding="utf-8").splitlines()

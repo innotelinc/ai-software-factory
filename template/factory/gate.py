@@ -62,7 +62,7 @@ def fail(target: str, reason: str) -> int:
     """
     print(f"GATE_FAIL: {reason}", file=sys.stderr)
     try:
-        state.set_state(target, "needs-human")
+        state.set_state(target, "needs-human", force=True)
     except Exception:  # noqa: BLE001
         pass
 
@@ -77,7 +77,7 @@ def fail(target: str, reason: str) -> int:
         pass
     if issue:
         try:
-            state.set_state(issue, "needs-human")
+            state.set_state(issue, "needs-human", force=True)
         except Exception:  # noqa: BLE001
             pass
         with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:

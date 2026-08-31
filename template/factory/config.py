@@ -183,6 +183,24 @@ SLACK_CAPS_AUTONOMY = _env("FACTORY_SLACK_CAPS_AUTONOMY", "true").lower() == "tr
 # there is no holdout, so the dial cannot outrun the evidence.
 AUTONOMY = _env_int("FACTORY_AUTONOMY", 0)
 
+# THE DIAL DECIDES WHICH MARKERS ARE MANDATORY, and this is not a convenience.
+#
+# The holdout and the mutation set are the entire argument for merging code nobody
+# read: one is a wall of assertions the builder cannot see, the other is the only
+# evidence any of the checks can fail at all. Below level 3 a person reads the diff,
+# so neither is load-bearing and a repo part-way through the build should not be
+# blocked on checks it has not written yet.
+#
+# At level 3 they become the load-bearing checks, so their markers become required.
+# Without this, a holdout that silently stops running -- renamed, crashed on import,
+# skipped by a bad path -- leaves a gate that still goes green, which is the exact
+# "empty is not pass" failure the marker list exists to prevent, aimed at the one
+# check that justifies the whole arrangement.
+if AUTONOMY >= 3:
+    for _m in ("HOLDOUT_PASSED", "MUTATIONS_OK"):
+        if _m not in REQUIRED_MARKERS:
+            REQUIRED_MARKERS.append(_m)
+
 MAX_PARALLEL = _env_int("FACTORY_MAX_PARALLEL", 1)
 MAX_FIX_ATTEMPTS = _env_int("FACTORY_MAX_FIX_ATTEMPTS", 2)
 TRIAGE_BATCH = _env_int("FACTORY_TRIAGE_BATCH", 10)

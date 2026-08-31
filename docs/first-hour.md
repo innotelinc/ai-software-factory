@@ -124,6 +124,20 @@ logic defects gets caught entirely by the unit suite, and the e2e, holdout and
 app-start rungs are never once shown to be able to fail. A perfect score can mean "the
 unit suite can fail" and nothing more.
 
+**Aiming is not landing, and only the report tells you which.** Both non-unit defects
+here landed on the unit suite the first time: the app-start one broke a module-level
+import every unit test hits, and the e2e one flipped a status code the unit tests
+assert directly. 10/10, four rungs claimed, two of them never demonstrated. A defect
+aimed at a rung must be **invisible to every rung above it**, or it measures the one
+above twice.
+
+**Expect re-aiming to find a hole in your assertions.** The corrected e2e defect
+escaped, because the journey asked whether `<table` appeared anywhere in the page while
+two other tables were still in the markup and the balances screen showed nothing. That
+is the same failure as a holdout asserting "the balances sum to zero" — a property that
+holds for a subset is not a check on the whole — and nothing but a defect aimed at that
+rung will ever show it to you.
+
 **State the gaps rather than faking them.** If you have no browser rung, do not write
 a presentation defect: it would report ESCAPED and be telling the truth. Write the gap
 down instead.

@@ -213,10 +213,45 @@ def fetch(target: str) -> dict[str, Any]:
     return raw
 
 
-def set_state(target: str, new: str) -> None:
+class IllegalTransition(Exception):
+    """A move the table forbids. Raised, never worked around."""
+
+
+def set_state(target: str, new: str, force: bool = False) -> None:
+    """Move an item, and REFUSE THE MOVE HERE rather than in a wrapper around it.
+
+    The table used to be enforced only in this module's CLI, so the eleven callers
+    that import `set_state` and call it directly -- the gate, the merge, the
+    dispatcher -- were governed by nothing. The guarantee read as absolute in the
+    docs and was, in fact, opt-in.
+
+    Enforcing it at the write also closes a race the wrapper could not. The check
+    ran against labels a node read at the START of its work; a validation once
+    claimed a PR that had been escalated to needs-human three minutes earlier,
+    because the label arrived after the read. `fetch()` below happens at the moment
+    of the write, which is the latest anything can know.
+
+    `force` exists for exactly one thing: parking at needs-human. Stopping is always
+    allowed from anywhere, and an escalation that cannot label because of a table
+    lookup is worse than any move it might have prevented.
+    """
     kind, num = parse_target(target)
     verb = "issue" if kind == "issue" else "pr"
     current = fetch(target)
+
+    old = current["_state"]
+    if not force and old != new and new not in TRANSITIONS.get(old, set()):
+        allowed = sorted(TRANSITIONS.get(old, set())) or ["(nothing -- a human must move this)"]
+        extra = ""
+        if old == "needs-human":
+            extra = (
+                " A node may never move an item out of needs-human (FACTORY_RULES 7); "
+                "remove the label by hand."
+            )
+        raise IllegalTransition(
+            f"{target} is '{old}'; '{new}' is not in {allowed}.{extra}"
+        )
+
     add = LABEL_FOR_STATE.get(new)
     remove = [
         lbl
@@ -539,28 +574,16 @@ def main(argv: list[str]) -> int:
                     )
                 key, value = pair.split("=", 1)
                 if key == "state":
-                    old = fetch(target)["_state"]
-                    if old == value:
-                        # Re-apply anyway. The labels ARE the state, so a state that
-                        # is already correct but carries no label is a state a human
-                        # cannot read. The one idempotent write, on purpose.
+                    # The check lives in set_state, so this path and the ten callers
+                    # that import it get the same answer. Re-applying the state an
+                    # item is already in is deliberate and allowed: the labels ARE
+                    # the state, so a correct state carrying no label is a state a
+                    # human cannot read.
+                    try:
                         set_state(target, value)
-                        continue
-                    allowed = TRANSITIONS.get(old, set())
-                    if value not in allowed:
-                        print(
-                            f"ILLEGAL_TRANSITION: {target} is '{old}'; '{value}' is not in "
-                            f"{sorted(allowed) or ['(nothing -- a human must move this)']}",
-                            file=sys.stderr,
-                        )
-                        if old == "needs-human":
-                            print(
-                                "A node may never move an item out of needs-human "
-                                "(FACTORY_RULES 7). Remove the label by hand.",
-                                file=sys.stderr,
-                            )
+                    except IllegalTransition as e:
+                        print(f"ILLEGAL_TRANSITION: {e}", file=sys.stderr)
                         return 1
-                    set_state(target, value)
                 elif key == "priority":
                     set_priority(target, value)
                 else:

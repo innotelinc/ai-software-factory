@@ -124,20 +124,44 @@ nodes:
     context: fresh
     depends_on: [brief]
     allowed_tools: []
+    # A FORMATTING FAILURE MUST NOT COST THE WHOLE VALIDATION.
+    #
+    # This node died five times on `error_max_structured_output_retries` and took the
+    # run with it: `apply` binds to `$judge.output`, a binding never falls back to
+    # `if_skipped` for a FAILED producer, so the one node that exists to report an
+    # infrastructure failure could not run. Fifty-two seconds of judging, a live
+    # worktree left behind, and a human paged -- because a word was not on a list.
+    #
+    # Two changes, and the first is the important one:
+    #
+    # 1. THE SCHEMA NOW CONSTRAINS ONLY WHAT IS BRANCHED ON. `factory/gate.py` reads
+    #    exactly one field to decide anything: `verdict`. `severity` and `category`
+    #    reach the PR comment through `f.get('severity', '?')` and change nothing.
+    #    Every enum on a field nobody branches on is a fresh chance per finding to
+    #    fail the whole run for a synonym -- eight of them on a five-finding review --
+    #    and the vocabulary belongs in the prompt, where being off it costs a slightly
+    #    worse comment instead of a dead validation.
+    #
+    # 2. One real retry, because the failure was not deterministic.
+    retry:
+      max_attempts: 2
+      on_error: all
     output_format:
       type: object
       properties:
         verdict:
+          # THE ONE ENUM THAT STAYS. The gate branches on this string, so a value
+          # outside the list has no defined behaviour and must fail loudly.
           type: string
           enum: [approve, request_changes, reject]
         solves_issue:
-          type: string
           # QUOTED, and it is not style. YAML 1.1 parses bare `yes` and `no` as
-          # BOOLEANS, so this enum loaded as [True, "partially", False] -- a schema
-          # demanding a boolean for a field declared `type: string`. The judge dutifully
-          # produced something that satisfied the contradiction and said nothing useful:
-          # summary "test", one finding "test issue", after two and a half minutes of
-          # real work. Nothing errored anywhere.
+          # BOOLEANS, so this enum once loaded as [True, "partially", False] -- a
+          # schema demanding a boolean for a field declared `type: string`. The judge
+          # produced something that satisfied the contradiction and said nothing
+          # useful: summary "test", one finding "test issue", after two and a half
+          # minutes of real work. Nothing errored anywhere.
+          type: string
           enum: ["yes", "partially", "no"]
         summary: { type: string }
         issues_to_fix:
@@ -145,18 +169,27 @@ nodes:
           items:
             type: object
             properties:
-              severity: { type: string, enum: [critical, high, medium, low] }
+              severity:
+                type: string
+                description: critical, high, medium or low
               category:
                 type: string
-                enum: [correctness, scope, observability, invariant, security, test, style]
+                description: >-
+                  correctness, scope, observability, invariant, security, test or
+                  style
               file: { type: string }
-              line: { type: string }
+              line:
+                type: string
+                description: line number or range, as text
               description: { type: string }
-            required: [severity, category, description]
+            required: [severity, description]
         rules_cited:
           type: array
           items: { type: string }
-      required: [verdict, solves_issue, summary, issues_to_fix, rules_cited]
+      # `summary` is required so a verdict always arrives with its reason. The rest
+      # are not: a clean approval has no findings and cites no rule it had to invoke,
+      # and demanding an empty array as proof of that is a fifth way to fail.
+      required: [verdict, summary]
 
   # --- THE GATE ------------------------------------------------------------
   # factory/gate.py reads the RAW markers and the verdict and merges only when both
