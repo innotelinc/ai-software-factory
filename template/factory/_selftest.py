@@ -452,6 +452,49 @@ def deploy_checks() -> None:
           "for marker in config.HEALTH_MARKERS:" in src)
 
 
+# --- one issue, one lap ------------------------------------------------------
+
+def duplication_checks() -> None:
+    """An issue a live pull request already answers must not be implemented again.
+
+    `next_action` selects on the issue's label alone, and `accepted` is reachable
+    while a PR for that issue is open. It happened: PR #13 was held on ratchet slack
+    and the very next tick answered `implement gh:issue:12` -- the issue that PR was
+    for. A second lap started, on a second branch, for work that was already built and
+    waiting on a human. Nothing stopped it except a lock that happened to still be
+    held by the validation, which is luck rather than a mechanism.
+
+    Driven with fakes, because the real thing needs GitHub.
+    """
+    real_list, real_linked = state._list, state.linked_issue
+    try:
+        state._list = lambda kind, st=None: (
+            [{"_target": "gh:pr:13", "_state": "held", "_labels": [], "_kind": "pr"}]
+            if kind == "prs" else
+            [{"_target": "gh:issue:12", "_state": "accepted", "_priority": "medium",
+              "_labels": [], "_kind": "issue"}]
+        )
+        state.linked_issue = lambda tgt: "gh:issue:12"
+        action, target, _ = state.next_action()
+        check("an issue whose PR is still open is not re-implemented",
+              action != "implement",
+              f"chose {action} {target}: a second branch for work already built")
+
+        # ...and the same issue IS work again once its PR is out of the picture.
+        state._list = lambda kind, st=None: (
+            [{"_target": "gh:pr:13", "_state": "rejected", "_labels": [], "_kind": "pr"}]
+            if kind == "prs" else
+            [{"_target": "gh:issue:12", "_state": "accepted", "_priority": "medium",
+              "_labels": [], "_kind": "issue"}]
+        )
+        action, target, _ = state.next_action()
+        check("but it is work again once that PR is rejected",
+              action == "implement" and target == "gh:issue:12",
+              f"chose {action} {target}: the filter is too broad and strands the issue")
+    finally:
+        state._list, state.linked_issue = real_list, real_linked
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     with tempfile.TemporaryDirectory() as td:
@@ -463,6 +506,7 @@ def main() -> int:
     enforcement_checks()
     write_safety_checks()
     deploy_checks()
+    duplication_checks()
 
     if FAILURES:
         if not quiet:

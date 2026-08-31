@@ -440,6 +440,32 @@ def next_action(exclude: set[str] | None = None) -> tuple[str, str, str]:
         return "merge", passed[0]["_target"], "every structural gate green"
 
     issues = [i for i in _list("issues") if i["_target"] not in exclude]
+
+    # AN ISSUE A LIVE PR ALREADY ANSWERS IS NOT WORK. This branch selects on the
+    # issue's label alone, and `accepted` is reachable while a pull request for that
+    # issue is open -- a human accepting an issue somebody already built, or an issue
+    # walked back from `in-progress` after its PR was opened. The dispatcher would
+    # then open a SECOND branch for the same issue, and both would try to merge.
+    #
+    # Seen: PR #13 was held on ratchet slack, and the very next tick answered
+    # `implement gh:issue:12` -- the issue that PR was for. Nothing stopped it except
+    # a lock that happened to still be held by the validation, which is luck rather
+    # than a mechanism.
+    #
+    # The reconcile sweep already asks this exact question about `in-progress`
+    # issues. Asking it here too is what makes the two agree.
+    answered = set()
+    for pr_ in prs:
+        if pr_["_state"] in ("merged", "rejected"):
+            continue
+        try:
+            owner = linked_issue(pr_["_target"])
+        except Exception:  # noqa: BLE001
+            continue
+        if owner:
+            answered.add(owner)
+    issues = [i for i in issues if i["_target"] not in answered]
+
     for prio in config.PRIORITIES:
         ready = [i for i in issues if i["_state"] == "accepted" and i["_priority"] == prio]
         if ready:

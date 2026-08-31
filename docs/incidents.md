@@ -209,6 +209,35 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### Two laps for one issue, stopped by a lock that happened to still be held
+
+**What happened.** PR #13 was held on ratchet slack. The very next dispatcher tick
+answered:
+
+```
+NEXT implement gh:issue:12 (highest-priority accepted issue (medium))
+```
+
+That is the issue PR #13 was for. A second implement lap started, on a second branch,
+for work that was already built and waiting on a person.
+
+**Why it only nearly happened.** The validation's lock was still held, so the duplicate
+could not take a slot on the tick I was watching — and then it did, one tick later,
+once that lock cleared. The run was live for 58 seconds before I cancelled it. The
+thing that "prevented" it the first time was a lock timing coincidence, which is luck
+rather than a mechanism.
+
+**The cause.** `next_action` selects an issue on its label alone, and `accepted` is
+reachable while a PR for that issue is open — a person accepting an issue somebody
+already built, or an issue walked back from `in-progress` after its PR opened. The
+reconcile sweep already asks exactly this question about `in-progress` issues, using
+`linked_issue`. The selection path did not ask it at all, so the two disagreed.
+
+**The rule.** An issue that a live pull request already answers is not work. Same
+question, same helper, both places — and once that PR is merged or rejected, the issue
+is selectable again, which the self-test checks in both directions, because a filter
+that is too broad strands the issue instead of duplicating it.
+
 ### The staleness check that called an unanswered question "current"
 
 **What happened.** The check added *the same afternoon* to catch a stale checkout read:

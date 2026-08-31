@@ -66,6 +66,9 @@ DEFECTS = [
     ("done stops closing the issue", "factory/state.py",
      '        elif new == "done" and current.get("state") == "OPEN":',
      '        elif False:', True),
+    ("an issue with a live PR becomes work again", "factory/state.py",
+     '    issues = [i for i in issues if i["_target"] not in answered]',
+     '    issues = list(issues)', True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already
