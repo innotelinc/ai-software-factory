@@ -131,6 +131,22 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
+    if not config.HEALTH_MARKERS:
+        # THE SAME REFUSAL, ONE STEP LATER, and it was missing. A health command with
+        # nothing to look for in its output collapses to "it exited zero" -- exactly
+        # what the comment fifteen lines below calls not-evidence. It printed
+        # `HEALTH_CHECK_OK markers=0` and moved the pointer, which is the
+        # empty-is-not-pass failure this whole system is built around, sitting in the
+        # one gate between a merge and a real user.
+        print(
+            "HEALTH_CHECK_UNCHECKABLE: FACTORY_HEALTH_CMD is set but "
+            "FACTORY_HEALTH_MARKERS is empty.\n"
+            "  Then the only thing asserted is an exit code, and a process that starts,\n"
+            "  does nothing and returns zero passes that. Name at least one string the\n"
+            "  working build prints. Pointer NOT moved."
+        )
+        return 1
+
     print("HEALTH_CHECK_START")
     rc, health = run(config.HEALTH_CMD, timeout=300)
     if rc != 0:

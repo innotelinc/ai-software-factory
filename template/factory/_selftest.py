@@ -345,6 +345,25 @@ def write_safety_checks() -> None:
                   "a failed label edit ends the node in a traceback instead of a verdict")
 
 
+# --- the last gate before a real user ----------------------------------------
+
+def deploy_checks() -> None:
+    """A health command with no markers to look for asserts an exit code and nothing
+    else. It printed `HEALTH_CHECK_OK markers=0` and moved the pointer -- the
+    empty-is-not-pass failure this system is built around, in the one gate standing
+    between a merge and a real user. The refusal for a MISSING health command was
+    there; the refusal for an unusable one was not.
+    """
+    src = (Path(__file__).resolve().parent / "deploy.py").read_text(encoding="utf-8")
+    check("deploy refuses a health check with nothing to check",
+          "if not config.HEALTH_MARKERS:" in src,
+          "markers=0 would pass and the pointer would move")
+    check("and refuses a missing health command",
+          "if not config.HEALTH_CMD:" in src)
+    check("the marker loop still runs after both guards",
+          "for marker in config.HEALTH_MARKERS:" in src)
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     with tempfile.TemporaryDirectory() as td:
@@ -355,6 +374,7 @@ def main() -> int:
     escalation_checks()
     enforcement_checks()
     write_safety_checks()
+    deploy_checks()
 
     if FAILURES:
         if not quiet:

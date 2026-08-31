@@ -288,6 +288,22 @@ def main(argv: list[str]) -> int:
             "Unattended then quietly means unmonitored", 3,
         )
 
+    # --- deployment, and whether its gate can fail ----------------------------
+    if not config.DEPLOY_CMD:
+        r.add(WARN, "deployment",
+              "FACTORY_DEPLOY_CMD unset -- merging is where this stops, so this is a "
+              "PR generator with very good gates")
+    elif not config.HEALTH_CMD:
+        r.add(FAIL, "deployment", "a deploy command with no health command: "
+              "nothing stands between a merge and a user", 3)
+    elif not config.HEALTH_MARKERS:
+        r.add(FAIL, "deployment",
+              "FACTORY_HEALTH_MARKERS is empty, so the health check asserts only an "
+              "exit code -- and a process that starts, does nothing and returns zero "
+              "passes that", 3)
+    else:
+        r.add(OK, "deployment", f"health asserts {len(config.HEALTH_MARKERS)} marker(s)")
+
     # --- the stop button ------------------------------------------------------
     r.add(OK, "stop button", f"{config.STOP_FILE.name} + the {config.STOP_LABEL} label")
 
