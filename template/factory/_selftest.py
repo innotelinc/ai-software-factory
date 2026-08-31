@@ -303,6 +303,48 @@ def enforcement_checks() -> None:
           "a wrapper governs only the callers that use the wrapper")
 
 
+# --- every state write must be able to fail safely ---------------------------
+
+def write_safety_checks() -> None:
+    """`set_state` talks to GitHub and can now also refuse an illegal move, so every
+    call site must either be inside a `try` or be a forced park.
+
+    One was not. The approve-but-hold branch of the gate wrote the state bare while
+    the branch fifteen lines below it -- the same write, for the same reason -- was
+    guarded. Unguarded, a label edit that fails ends the gate in a traceback and
+    leaves the PR at `validating` with nothing holding it: the exact shape the
+    reconcile sweep has to clean up, arriving as a crash instead of a verdict.
+    """
+    import ast as _ast
+
+    here = Path(__file__).resolve().parent
+    for mod in sorted(here.glob("*.py")):
+        if mod.name.startswith("_"):
+            continue
+        try:
+            tree = _ast.parse(mod.read_text(encoding="utf-8"))
+        except SyntaxError:
+            check("factory/" + mod.name + " parses", False)
+            continue
+
+        guarded: set = set()
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Try):
+                for inner in _ast.walk(node):
+                    guarded.add(id(inner))
+
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            if not _ast.unparse(node.func).endswith("set_state"):
+                continue
+            forced = any(k.arg == "force" for k in node.keywords)
+            where = "factory/" + mod.name + ":" + str(node.lineno)
+            check("the state write at " + where + " can fail safely",
+                  forced or id(node) in guarded,
+                  "a failed label edit ends the node in a traceback instead of a verdict")
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     with tempfile.TemporaryDirectory() as td:
@@ -312,6 +354,7 @@ def main() -> int:
     marker_checks()
     escalation_checks()
     enforcement_checks()
+    write_safety_checks()
 
     if FAILURES:
         if not quiet:

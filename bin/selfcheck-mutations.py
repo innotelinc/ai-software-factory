@@ -26,6 +26,7 @@ import tempfile
 from pathlib import Path
 
 HOME = Path(__file__).resolve().parent.parent
+NEWLINE = chr(10)
 
 # (name, file, anchor, replacement, applicable)
 DEFECTS = [
@@ -49,6 +50,9 @@ DEFECTS = [
      True),
     ("the level-3 markers stop following the dial", "factory/config.py",
      "if AUTONOMY >= 3:", "if False:", True),
+    ("a state write loses its try/except", "factory/gate.py",
+     "            try:" + NEWLINE + '                state.set_state(target, "passed")',
+     '            state.set_state(target, "passed")', True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already

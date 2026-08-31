@@ -391,7 +391,19 @@ def main(argv: list[str]) -> int:
 
     if decision == "approve":
         if not automerge:
-            state.set_state(target, "passed")
+            # Guarded like the auto-merge branch below, and for the same reason: this
+            # write is a label edit against GitHub and it can fail for ordinary
+            # reasons -- a missing label on a fresh factory, or a concurrent
+            # escalation that makes the move illegal. Unguarded, the gate ends in a
+            # traceback and the PR sits in `validating` with nothing holding it.
+            try:
+                state.set_state(target, "passed")
+            except Exception as e:  # noqa: BLE001
+                return fail(
+                    target,
+                    f"the gate passed with the merge held, but the state could not be "
+                    f"written ({e}); a held PR nothing can read is a stalled PR",
+                )
             body = [
                 "## Factory Gate: PASS, merge HELD",
                 "",
