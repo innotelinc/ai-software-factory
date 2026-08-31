@@ -245,6 +245,19 @@ It refuses below level 1, because a scheduler at level 0 wakes up forever and
 correctly does nothing — which is exactly how people convince themselves a factory is
 running when it has never completed a lap.
 
+**Check what it actually installed**, on Windows especially. `arm` schedules two jobs:
+the dispatcher on the interval, and the weekly regression that re-tests what already
+merged. The first version of this installed only the dispatcher on Windows and reported
+`ARMED` — so the factory ran, the doctor said armed, and merged code was never re-tested.
+Nothing reports a job that was never created.
+
+```powershell
+Get-ScheduledTask | Where-Object { $_.TaskName -like "darkfactory-*" }
+```
+```bash
+crontab -l | grep darkfactory
+```
+
 **Nothing pushes.** Filing an issue does not trigger a run; the scheduler wakes on a
 timer and reads the state. An issue filed at 09:01 waits for the next tick. That is
 the trade: a push trigger that breaks fails silently and looks identical to a factory

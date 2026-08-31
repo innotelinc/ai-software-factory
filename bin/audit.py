@@ -550,6 +550,76 @@ def check_lock_liveness(root: Path) -> None:
         )
 
 
+def check_workflow_state_writes(root: Path) -> None:
+    """Every `state=<x>` a workflow script writes must be a declared state.
+
+    These are string literals passed to a CLI, so a typo is not a syntax error and not
+    a test failure -- it is a runtime refusal on a path that might not fire for weeks,
+    at which point it looks like the factory stalling for no reason.
+    """
+    state_src = (root / "factory" / "state.py").read_text(encoding="utf-8")
+    declared = set(re.findall(r'^\s{4}"([a-z-]+)":\s*(?:set\(\)|\{)', state_src, re.M))
+    if not declared:
+        fail("workflow state writes", "could not read the transition table from state.py")
+        return
+    pack = root / ".archon" / "workflows" / "darkfactory"
+    for script in sorted(pack.rglob("*.py")):
+        body = script.read_text(encoding="utf-8")
+        for m in re.finditer(r'"state=([a-z-]+)"', body):
+            if m.group(1) not in declared:
+                fail(
+                    "workflow state writes",
+                    f"{script.parent.parent.name}/{script.name} writes "
+                    f"state={m.group(1)!r}, which the transition table does not declare",
+                )
+
+
+def check_trigger_parity(root: Path) -> None:
+    """Both scheduler backends must install BOTH jobs.
+
+    The cron path installed the dispatcher and the weekly regression; the Task
+    Scheduler path installed the dispatcher and said "ARMED". A Windows factory was
+    then fully armed, fully green in the doctor, and never once re-tested what it had
+    already merged -- the component whose whole job is noticing that merged code
+    stopped working simply was not scheduled.
+
+    Nothing reports a job that was never created, which is why this is checked here
+    rather than trusted to a run.
+    """
+    trig = root / "factory" / "trigger.py"
+    if not trig.exists():
+        return
+    body = trig.read_text(encoding="utf-8")
+    # code_only, and the reason is a measured one: the first version grepped the raw
+    # function text, and a build with the regression call DELETED still passed --
+    # because the comment above it explained what the call was for. A check that its
+    # own explanation satisfies is a check that cannot fail.
+    for backend, marker, needs in (
+        ("cron", "install_cron", "REGRESS"),
+        ("task scheduler", "install_task_scheduler", "install_regress_task_scheduler("),
+    ):
+        start = body.find("def " + marker + "(")
+        if start < 0:
+            fail("trigger parity", marker + "() is missing from factory/trigger.py")
+            continue
+        nxt = body.find("\ndef ", start + 1)
+        chunk = code_only(body[start:nxt if nxt > 0 else len(body)])
+        if needs not in chunk:
+            fail(
+                "trigger parity",
+                "the " + backend + " backend never schedules the regression, so an "
+                "armed factory would never re-test what it merged -- and would audit "
+                "as armed",
+            )
+    rm = body.find("def remove(")
+    if rm >= 0 and "-regress" not in body[rm:]:
+        fail(
+            "trigger parity",
+            "remove() does not delete the regression job, so disarming leaves it "
+            "filing issues into a queue nothing dispatches",
+        )
+
+
 def main(argv: list[str]) -> int:
     root = HOME / "template"
     if "--repo" in argv:
@@ -569,6 +639,8 @@ def main(argv: list[str]) -> int:
     check_deny_lists(root)
     check_selftest_wired(root)
     check_lock_liveness(root)
+    check_workflow_state_writes(root)
+    check_trigger_parity(root)
 
     fails = [f for f in FINDINGS if f[0] == "FAIL"]
     warns = [f for f in FINDINGS if f[0] == "warn"]

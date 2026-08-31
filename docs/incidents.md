@@ -209,6 +209,37 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### The armed factory that never re-tested anything
+
+**What happened.** `darkfactory arm` on Windows printed `ARMED`, created the scheduled
+task, and the doctor reported `trigger armed: scheduled`. Everything agreed the factory
+was running.
+
+The **regression was never scheduled.** The cron backend installs two entries — the
+dispatcher every thirty minutes and the weekly re-test of what already merged. The Task
+Scheduler backend installed one, and returned success.
+
+**So a Windows factory could be fully armed, fully green, and never once re-test its own
+merged code** — the component whose entire job is noticing that something that used to
+work stopped working simply was not there. And nothing reports a job that was never
+created, so the only symptom is bugs not being found, which is indistinguishable from
+there being none.
+
+This is the "a fully built factory with nothing scheduled audits identically to a
+running one" failure that the trigger check exists to prevent — reproduced one level
+down, inside the thing that installs the trigger.
+
+**The rule.** Both backends install both jobs, `remove()` deletes both, and
+`bin/audit.py` checks the parity, because a missing scheduled job leaves no trace to
+find at runtime.
+
+**A note on how the check itself first failed.** It grepped the raw function text for
+the regression, and a build with the call *deleted* still passed — the comment above
+the call explained what it was for, and the grep matched the explanation. A check that
+its own rationale satisfies is a check that cannot fail. It now reads the code with
+comments and docstrings stripped, which is the same repair the lock-liveness check
+needed, for the same reason.
+
 ### The race that was finally run, by accident
 
 **What happened.** Two dispatcher loops ran against the same repository for

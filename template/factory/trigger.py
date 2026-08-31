@@ -90,6 +90,50 @@ def install_cron() -> int:
     return 0
 
 
+def _weekly_from_cron(spec: str) -> tuple[str, str]:
+    """`m h * * dow` -> ("MON", "06:00") for schtasks.
+
+    Only the shape this factory ships is parsed. Anything else falls back to the
+    documented default and SAYS SO -- silently scheduling a regression at a time
+    nobody chose is how you find out months later that it never ran on the day you
+    thought it did.
+    """
+    days = {"0": "SUN", "1": "MON", "2": "TUE", "3": "WED", "4": "THU", "5": "FRI",
+            "6": "SAT", "7": "SUN"}
+    parts = spec.split()
+    try:
+        minute, hour, _, _, dow = parts[0], parts[1], parts[2], parts[3], parts[4]
+        return days[dow.split(",")[0]], f"{int(hour):02d}:{int(minute):02d}"
+    except (IndexError, KeyError, ValueError):
+        print(
+            f"  ! FACTORY_REGRESS_CRON={spec!r} is not a plain 'm h * * dow'; "
+            f"scheduling the regression MON 06:00 instead"
+        )
+        return "MON", "06:00"
+
+
+def install_regress_task_scheduler() -> int:
+    """Windows. The weekly re-test of what already merged."""
+    log = config.SHARED / ".factory" / "factory.log"
+    day, at = _weekly_from_cron(config.REGRESS_CRON)
+    name = f"{config.TASK_NAME}-regress"
+    cmd = f'cmd /c "cd /d {config.SHARED} && {REGRESS} >> {log} 2>&1"'
+    p = subprocess.run(
+        [
+            "schtasks", "/Create", "/F",
+            "/SC", "WEEKLY", "/D", day, "/ST", at,
+            "/TN", name,
+            "/TR", cmd,
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    if p.returncode != 0:
+        print(f"REGRESS_ARM_FAILED: {p.stdout} {p.stderr}", file=sys.stderr)
+        return 1
+    print(f"ARMED Task Scheduler task '{name}' weekly, {day} {at}")
+    return 0
+
+
 def install_task_scheduler() -> int:
     """Windows. Note it only runs while someone is logged in unless configured
     otherwise -- a detail that presents as "the factory stopped overnight"."""
@@ -109,8 +153,26 @@ def install_task_scheduler() -> int:
     if p.returncode != 0:
         print(f"ARM_FAILED: {p.stdout} {p.stderr}", file=sys.stderr)
         return 1
+    # THE REGRESSION GETS ITS OWN SCHEDULE, and it did not.
+    #
+    # The cron path installs two entries -- the dispatcher and the weekly regression.
+    # This path installed one, and said "ARMED". The doctor then reported the factory
+    # as armed, because a trigger file existed. So a Windows factory could be fully
+    # armed, fully green, and never once re-test what it had already merged: the
+    # component whose entire job is noticing that merged code stopped working simply
+    # was not there.
+    #
+    # That is the "audits identically to a running one" failure the trigger check was
+    # written to prevent, reproduced one level down inside the thing that installs it.
+    regress_rc = install_regress_task_scheduler()
+
     record("schtasks", config.TASK_NAME)
     print(f"ARMED Task Scheduler task '{config.TASK_NAME}' every {config.INTERVAL_MINUTES} minutes")
+    if regress_rc != 0:
+        print(
+            f"  ! the weekly regression task was NOT installed. Merged code will never "
+            f"be re-tested; run `schtasks /Query /TN {config.TASK_NAME}-regress` to check"
+        )
     print()
     print("  NOTE: a Task Scheduler task only runs while someone is logged in unless")
     print("  you configure it otherwise. That detail presents as 'the factory stopped")
@@ -121,11 +183,16 @@ def install_task_scheduler() -> int:
 def remove() -> int:
     removed = False
     if os.name == "nt":
-        p = subprocess.run(
-            ["schtasks", "/Delete", "/F", "/TN", config.TASK_NAME],
-            capture_output=True, text=True, timeout=120,
-        )
-        removed = p.returncode == 0
+        # BOTH. Removing only the dispatcher leaves the weekly regression running
+        # against a factory nobody is dispatching for -- it would keep filing issues
+        # into a queue that never moves, which is a worse state than either armed or
+        # disarmed and belongs to neither.
+        for name in (config.TASK_NAME, f"{config.TASK_NAME}-regress"):
+            p = subprocess.run(
+                ["schtasks", "/Delete", "/F", "/TN", name],
+                capture_output=True, text=True, timeout=120,
+            )
+            removed = removed or p.returncode == 0
     elif shutil.which("crontab"):
         rc = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=60)
         if rc.returncode == 0 and config.TASK_NAME in rc.stdout:

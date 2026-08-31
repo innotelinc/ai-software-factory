@@ -50,7 +50,16 @@ def send(target: str, reason: str) -> str:
             "NOT NOTIFIED - FACTORY_NOTIFY_CMD unset; this waits in "
             f"{config.NEEDS_HUMAN.relative_to(config.ROOT) if config.NEEDS_HUMAN.is_relative_to(config.ROOT) else config.NEEDS_HUMAN}"
         )
-    message = f"{target} needs a human: {reason}"
+    # TERMINATED, and it is not cosmetic. The channel receives this on stdin, and the
+    # documented starting point is `tee -a .factory/escalations.log`. Without the
+    # newline every escalation runs into the next one and the log is a single
+    # unreadable line -- which is worse than no log, because it looks like there is
+    # one. A channel a person cannot skim is the "file nobody opens" problem wearing
+    # a different hat.
+    #
+    # A stray blank line in a chat message costs nothing; a run-together log costs the
+    # only record of what stopped, on the day somebody needs to read it.
+    message = f"{target} needs a human: {reason}".rstrip() + "\n"
     try:
         p = subprocess.run(
             config.NOTIFY_CMD,
