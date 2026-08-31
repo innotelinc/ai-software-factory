@@ -63,6 +63,9 @@ DEFECTS = [
     ("held becomes mergeable", "factory/state.py",
      '    "held": {"open", "needs-human", "rejected"},',
      '    "held": {"open", "needs-human", "rejected", "merged"},', True),
+    ("done stops closing the issue", "factory/state.py",
+     '        elif new == "done" and current.get("state") == "OPEN":',
+     '        elif False:', True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already

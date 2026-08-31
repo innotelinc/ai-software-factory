@@ -355,6 +355,21 @@ def enforcement_checks() -> None:
         cli = (Path(__file__).resolve().parent.parent / "factory" / "doctor.py")
         check("the gate holds on a file it re-reads every run", gate_reads)
 
+        # AN ISSUE MARKED done MUST ACTUALLY CLOSE. Relying on `Fixes #N` in the PR
+        # body is relying on GitHub's prose parsing of text an agent wrote -- and one
+        # PR put the keyword inside backticks, so GitHub ignored it and the issue sat
+        # OPEN under a `factory:done` label, reading as finished on every board.
+        at("in-progress")
+        writes.clear()
+        state.fetch = lambda t_: {
+            "_state": "in-progress", "_labels": [], "_kind": "issue",
+            "_target": t_, "state": "OPEN",
+        }
+        state.set_state("gh:issue:1", "done")
+        closed = any("close" in " ".join(str(x) for x in call) for call in writes)
+        check("marking an issue done closes it", closed,
+              "the label would say finished while the issue stayed open")
+
         merge_src = (Path(__file__).resolve().parent / "merge.py").read_text(encoding="utf-8")
         check("merge refuses any state that is not exactly passed",
               """if pr["_state"] != "passed":""" in merge_src,

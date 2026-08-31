@@ -290,6 +290,19 @@ def set_state(target: str, new: str, force: bool = False) -> None:
     if kind == "issue":
         if new == "rejected" and current.get("state") == "OPEN":
             gh("issue", "close", num, "--reason", "not planned", check=False)
+        elif new == "done" and current.get("state") == "OPEN":
+            # CLOSE IT HERE rather than trusting `Fixes #N` in the PR body.
+            #
+            # GitHub's linkage is prose parsing, and prose is what an agent writes.
+            # One PR put the keyword inside backticks -- `Fixes #10` -- and GitHub
+            # ignored it: the branch merged, the issue was labelled `factory:done`,
+            # and it stayed OPEN. Nothing errored, and the label made the board read
+            # as if it had been closed.
+            #
+            # A step that must happen should not depend on somebody else's markdown
+            # parser agreeing with the formatting. `Fixes #N` stays in the body
+            # because it makes the PR readable; it is no longer what does the work.
+            gh("issue", "close", num, "--reason", "completed", check=False)
         elif new == "accepted" and current.get("state") != "OPEN":
             gh("issue", "reopen", num, check=False)
 

@@ -209,6 +209,28 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### The closing keyword that was formatted as code
+
+**What happened.** A lap finished perfectly: PR merged, issue labelled `factory:done`.
+The issue was still **open**.
+
+**The cause.** The PR body said `` `Fixes #10` `` — with backticks. GitHub does not
+treat a linkage keyword inside a code span as a closing reference, so it did nothing.
+The previous PR had written `Fixes #8.` in plain prose and closed correctly.
+
+Nothing errored. And the label made it worse rather than better: `factory:done` on an
+open issue reads as finished on every board a person would look at.
+
+**The rule.** A step that must happen does not depend on somebody else's markdown
+parser agreeing with an agent's formatting. `set_state(issue, "done")` closes the issue
+itself. `Fixes #N` stays in the body because it makes the PR readable; it is no longer
+what does the work.
+
+**The general shape**, and it is the third time it appears in this list: a load-bearing
+step delegated to prose. The judge's verdict thrown away over an enum, the hold written
+as a comment, and now the close written as a keyword — each time the mechanism was a
+sentence, and each time the failure looked like success.
+
 ### The reaper whose docstring explained why it was safe, in a system where that was false
 
 **What happened.** With the lock-release path fixed, an implement lap was escalated as
