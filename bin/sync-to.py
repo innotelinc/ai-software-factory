@@ -62,7 +62,14 @@ def main(argv: list[str]) -> int:
         src = TEMPLATE / entry
         if not src.exists():
             continue
-        files = [p for p in src.rglob("*") if p.is_file()] if src.is_dir() else [src]
+        # Compiled bytecode is not source and must never cross repositories: it is
+        # regenerated on first import, it is gitignored on one side and was tracked on
+        # the other, and a .pyc that arrives with a future mtime is a module that
+        # silently does not match the .py sitting next to it.
+        files = ([p for p in src.rglob("*")
+                  if p.is_file() and "__pycache__" not in p.parts
+                  and p.suffix not in (".pyc", ".pyo")]
+                 if src.is_dir() else [src])
         for f in files:
             rel = f.relative_to(TEMPLATE).as_posix()
             if rel in NEVER:

@@ -121,6 +121,83 @@ invariant with the reason attached rather than a preference.
 
 ---
 
+### The empty answer that was read as a negative answer
+
+**What happened.** The factory found its own regression, filed issue #6 about it,
+triaged it critical, and dispatched an implement lap. Seventy-five seconds later the
+next tick escalated that issue to `needs-human`:
+
+```
+ESCALATE gh:issue:6: left in 'in-progress' with no PR record and no run holding it;
+                     an implement lap died before it opened one
+```
+
+The lap had not died. It ran for another twenty minutes and finished.
+
+**The cause.** A detached run outlives the process that launched it, so the lock it
+holds cannot be released by that process, and its PID proves nothing — it exits
+immediately. `release_settled_locks()` therefore asked the engine what was still
+running and matched the answer against each lock. It matched on **branch name**, and
+the engine populates no branch in that payload. Every entry came back blank, the
+blanks were filtered out as junk, and each lock was compared against an empty set.
+`any()` over an empty set is `False`, so the conclusion was "no run holds this" — for
+every lock, one tick after it was taken, unconditionally.
+
+The reconcile sweep then did its job perfectly on a false premise: an item
+`in-progress`, no PR, no lock. That is exactly what a died lap looks like.
+
+Worth noticing what this cost *before* it was understood: it also produced
+`could not move gh:pr:5 to 'validating'` earlier in the same build — two validations
+racing for one PR, because the lock meant to stop that had already been dropped. One
+bug, two symptoms, and neither of them looked like a locking problem.
+
+**The rule.** **An empty answer is not a negative answer.** This is the same
+"empty is not pass" the gate is built around, and it is easier to violate in the
+machinery than in the harness, because nothing here has a marker to count. Every
+unknown must keep the lock:
+
+- The run list came back unreadable, empty, or with no usable ids → **keep**.
+- This run id is not in the reported window → **keep**. Absence from a truncated list
+  is not evidence a run ended.
+- The status is one this engine has never been seen to emit → **keep**. Unknown means
+  still running.
+- Only a run id the engine positively reports as `completed` / `failed` / `cancelled`
+  releases anything.
+
+The costs are not symmetric, and that is the whole argument: a lock held too long
+stalls one target until the age reaper frees it, and a lock dropped too early runs two
+writers over one worktree and escalates work that was going fine.
+
+**And match on an identifier both sides agree on.** The branch was never a shared
+identifier; it was a name this code invented and hoped the engine would echo back. The
+run id is printed by the dispatch and recorded on the lock, so the question asked is
+about the same object the answer is about.
+
+### The machinery that had a harness for everything except itself
+
+**What happened.** The bug above lived in the file whose entire job is deciding what is
+alive. It had no test. Every check in this repository pointed at the product: the
+harness proves the software works, the mutation set proves the harness can fail, the
+doctor proves the factory was given what it needs. Nothing proved the **factory's own
+parts behave as written** — and a dispatcher that mis-decides which laps are alive
+produces a repository that looks exactly like a quiet one.
+
+**The rule.** `factory/_selftest.py`, run by the doctor on every audit. Fast, offline,
+no GitHub. It pins the invariants that were once wrong in a way that read as normal
+operation: an empty run list keeps a lock, an unrecognised status keeps a lock,
+`needs-human` is terminal, `passed` does not lead back to `validating`, an empty log
+yields no counts, and every state that is not defined by absence has a label.
+
+It was mutation-tested the same day it was written — the original defect was injected
+into a throwaway copy and the self-test went red, which is the only reason to believe
+any of it can fail at all.
+
+One check earns its place for a different reason: `import config` and
+`from factory import config` produce **two module objects with separate state**. The
+first draft of the self-test used the second form, so it configured a copy of the thing
+it believed it was testing. Every call succeeded and three assertions came back false
+for a reason that had nothing to do with the code under test.
+
 ## Inherited from the factory this one was built from
 
 These were paid for by an earlier experiment. They are not hypothetical either.

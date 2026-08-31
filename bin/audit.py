@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ast
 import json
+import subprocess
 import re
 import sys
 from pathlib import Path
@@ -411,6 +412,144 @@ def check_deny_lists(root: Path) -> None:
                 )
 
 
+def code_only(source: str) -> str:
+    """Source with comments and DOCSTRINGS removed, and every other literal kept.
+
+    A grep for a forbidden identifier matches the paragraph explaining why it is
+    forbidden -- both checks below flagged their own docstrings the first time they
+    ran. The obvious repair, dropping every string token, is worse and it was measured
+    that way: the defect these checks exist for was `r.get("branch")`, so stripping
+    string literals hides the exact expression being hunted. The mutation went from
+    CAUGHT to ESCAPED and the check kept reporting clean.
+
+    Docstrings out, literals in. `ast.unparse` drops comments for free.
+    """
+    import ast as _ast
+
+    class _Strip(_ast.NodeTransformer):
+        def _drop(self, node):
+            self.generic_visit(node)
+            body = getattr(node, "body", [])
+            if (body and isinstance(body[0], _ast.Expr)
+                    and isinstance(body[0].value, _ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                node.body = body[1:] or [_ast.Pass()]
+            return node
+
+        visit_Module = visit_FunctionDef = _drop
+        visit_AsyncFunctionDef = visit_ClassDef = _drop
+
+    try:
+        return _ast.unparse(_ast.fix_missing_locations(_Strip().visit(_ast.parse(source))))
+    except (SyntaxError, ValueError):
+        return source
+
+
+def runs_selftest(doctor_src: str) -> bool:
+    """Does the doctor actually SPAWN the self-test?
+
+    Grepping the file for the name is not the same question. The first version of this
+    check asked that, and a doctor edited to launch `_nothing.py` still passed -- the
+    name survived in the failure message it prints, which is text about the test rather
+    than an invocation of it.
+    """
+    import ast as _ast
+    try:
+        tree = _ast.parse(doctor_src)
+    except SyntaxError:
+        return False
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Call):
+            continue
+        fn = _ast.unparse(node.func)
+        if "subprocess" not in fn and "Popen" not in fn:
+            continue
+        if "_selftest" in _ast.unparse(node):
+            return True
+    return False
+
+
+def check_selftest_wired(root: Path) -> None:
+    """The machinery self-test must exist, and the doctor must run it.
+
+    A test nobody runs is a comment. This one guards the parts that decide which laps
+    are alive, what counts as passed, and what may move -- and every one of those was
+    once wrong in a way that read as a quiet, healthy repository.
+    """
+    st = root / "factory" / "_selftest.py"
+    if not st.exists():
+        fail("machinery self-test", "factory/_selftest.py is missing")
+        return
+    proc = subprocess.run(
+        [sys.executable, str(st), "--quiet"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=180,
+    )
+    last = (proc.stdout or "").strip().splitlines()
+    marker = last[-1] if last else ""
+    if not marker.startswith("SELFTEST_PASSED"):
+        fail("machinery self-test", (marker or "produced no marker at all")
+             + " -- run `python factory/_selftest.py` for the list")
+
+    if not runs_selftest((root / "factory" / "doctor.py").read_text(encoding="utf-8")):
+        fail(
+            "machinery self-test",
+            "factory/doctor.py never spawns _selftest.py, so nothing runs it on an "
+            "audit -- and an unrun test audits identically to a passing one",
+        )
+    if "from factory import" in code_only(st.read_text(encoding="utf-8")):
+        fail(
+            "machinery self-test",
+            "_selftest.py imports `from factory import ...` while the modules it tests "
+            "import flat -- that is two module objects with separate state, so the test "
+            "configures a copy of the thing it believes it is testing",
+        )
+
+
+def check_lock_liveness(root: Path) -> None:
+    """A lock may only be released on a positive report about a run id.
+
+    The failure this exists for did not look like a bug: liveness was inferred from a
+    branch name the engine never populates, so the set of live runs was empty and every
+    lock was released one tick after it was taken. Nothing errored. The reconcile sweep
+    then escalated running work as dead, correctly, on a false premise.
+    """
+    d = root / "factory" / "dispatch.py"
+    if not d.exists():
+        return
+    text = d.read_text(encoding="utf-8")
+    start = text.find("def release_settled_locks(")
+    if start < 0:
+        fail("lock liveness", "release_settled_locks() not found in factory/dispatch.py")
+        return
+    nxt = text.find("\ndef ", start + 1)
+    body = code_only(text[start:nxt if nxt > 0 else len(text)])
+    if "RUN_ID_RE" not in text or "lock_run_id" not in body:
+        fail(
+            "lock liveness",
+            "release_settled_locks() does not key on a recorded run id. Any other "
+            "identifier is a name this code invented and hoped the engine echoes back",
+        )
+    if "branch" in body:
+        fail(
+            "lock liveness",
+            "release_settled_locks() still mentions `branch`. The engine does not report "
+            "one in that payload, and matching against a blank is how every lock got "
+            "released one tick after it was taken",
+        )
+    if "if not status_by_id" not in body:
+        fail(
+            "lock liveness",
+            "release_settled_locks() has no guard for an empty run list. Empty is "
+            "silence, not 'nothing is running' -- keeping those apart is the whole job",
+        )
+    if "SETTLED_STATUSES" not in body:
+        fail(
+            "lock liveness",
+            "release_settled_locks() does not test membership of an explicit settled "
+            "set, so a status this engine has not been seen to emit could free a lock",
+        )
+
+
 def main(argv: list[str]) -> int:
     root = HOME / "template"
     if "--repo" in argv:
@@ -428,6 +567,8 @@ def main(argv: list[str]) -> int:
     check_no_freelance_writes(root)
     check_holdout_isolation(root)
     check_deny_lists(root)
+    check_selftest_wired(root)
+    check_lock_liveness(root)
 
     fails = [f for f in FINDINGS if f[0] == "FAIL"]
     warns = [f for f in FINDINGS if f[0] == "warn"]

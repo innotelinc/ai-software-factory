@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -94,6 +95,16 @@ def escalate(target: str, why: str) -> None:
     except Exception:  # noqa: BLE001
         pass
     log(notify.send(target, why))
+
+
+RUN_ID_RE = re.compile(
+    r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+)
+# A run in any of these is over. Anything else -- INCLUDING a status this version of
+# the engine has never been seen to emit -- counts as still running, because the
+# cost of guessing wrong in that direction is only a delay.
+SETTLED_STATUSES = {"completed", "failed", "cancelled", "canceled", "abandoned",
+                    "error", "errored", "timeout", "timed_out", "stopped"}
 
 
 # --- locks --------------------------------------------------------------------
@@ -267,48 +278,100 @@ def dispatch(action: str, target: str) -> bool:
         )
         return False
 
-    # Detached: Archon owns it now. The lock is released by the run's own completion
-    # hook, or reaped by age/PID above -- deliberately NOT here, because returning
+    # Detached: Archon owns it now. The lock is NOT released here, because returning
     # from a detached launch does not mean the work finished.
+    #
+    # Record WHICH run holds it. Everything downstream that decides a lap is dead
+    # keys on this id, because it is the only identifier both sides agree on: the
+    # dispatching process exits the moment the run detaches, so its PID says nothing,
+    # and the engine's run list does not report the branch.
+    run_id = ""
+    try:
+        m = RUN_ID_RE.search(logfile.read_text(encoding="utf-8", errors="replace")[-4000:])
+        run_id = m.group(1) if m else ""
+    except OSError:
+        pass
+    if run_id:
+        with lock.open("a", encoding="utf-8") as fh:
+            fh.write("run " + run_id + "\n")
+    else:
+        log(f"  ! no run id found in {logfile.name}; this lock can only be freed by age")
     log(f"DISPATCHED {workflow} {target} (detached; lock {lock.name} held until the run settles)")
     return True
 
 
-def release_settled_locks() -> None:
-    """A lock whose run is no longer in Archon's active list is a lock to release.
+def lock_run_id(lock: Path) -> str:
+    """The Archon run id recorded on a lock, or empty if it carries none."""
+    try:
+        m = RUN_ID_RE.search(lock.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
 
-    Detached runs outlive this process, so the lock cannot be released by the
-    dispatch that took it. Asking Archon what is still running is the honest test,
-    and it degrades safely: if the question cannot be answered, the age/PID reaper
-    above still frees the lock eventually.
+
+def release_settled_locks(payload_override: dict | list | None = None) -> None:
+    """Release a lock only when the run that took it is PROVABLY finished.
+
+    The only question that can be answered honestly here is about a run id. The
+    dispatching process exits the instant the run detaches, so its PID proves
+    nothing, and the engine's run list does not report a branch -- so anything that
+    infers liveness from a name is guessing.
+
+    The first version of this guessed, and the guess collapsed to nothing: it built
+    the set of active *branches*, every entry came back blank, the blanks were
+    filtered out, and each lock was then compared against an empty set. `any()` over
+    an empty set is False, so it concluded "no run holds this" for every lock and
+    released all of them one tick after they were taken. The reconcile sweep then
+    found a live lap holding no lock and escalated it as dead -- while it was still
+    running, and while it went on to finish.
+
+    EMPTY IS NOT AN ANSWER. Every unknown below KEEPS the lock and leaves it to the
+    age/PID reaper, which is slow on purpose. A lock held too long stalls one target
+    until LOCK_STALE_MINUTES; a lock dropped too early runs two writers over one
+    worktree and escalates work that was going fine. Those costs are not symmetric.
     """
-    locks = in_flight()
+    locks = [lk for lk in in_flight() if lock_run_id(lk)]
     if not locks:
         return
-    try:
-        out = subprocess.run(
-            [config.ARCHON_BIN, "workflow", "runs", "--json"],
-            cwd=str(config.ROOT), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=120,
-        )
-        if out.returncode != 0:
+    if payload_override is not None:
+        payload = payload_override
+    else:
+        try:
+            out = subprocess.run(
+                [config.ARCHON_BIN, "workflow", "runs", "--json"],
+                cwd=str(config.ROOT), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=120,
+            )
+            if out.returncode != 0:
+                return
+            raw = out.stdout or ""
+            offsets = [i for i in (raw.find("{"), raw.find("[")) if i >= 0]
+            if not offsets:
+                return
+            payload = json.loads(raw[min(offsets):])
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
             return
-        payload = json.loads(out.stdout or "{}")
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+
+    runs = payload.get("runs", []) if isinstance(payload, dict) else payload
+    if not isinstance(runs, list):
+        return
+    status_by_id = {
+        str(r.get("id") or r.get("runId") or ""): str(r.get("status", "")).lower()
+        for r in runs if isinstance(r, dict)
+    }
+    status_by_id.pop("", None)
+    if not status_by_id:
+        # Unreadable or empty. That is silence, not "nothing is running" -- and
+        # keeping those two apart is the entire job of this function.
         return
 
-    runs = payload.get("runs", payload if isinstance(payload, list) else [])
-    active_branches = {
-        (r.get("branch") or r.get("worktreeBranch") or "")
-        for r in runs
-        if str(r.get("status", "")).lower() in ("running", "pending", "paused", "queued")
-    }
     for lock in locks:
-        # The lock name encodes the target; the branch encodes it the same way.
-        stem = lock.stem  # e.g. validate-gh-pr-14
-        target_part = stem.split("-", 1)[1] if "-" in stem else stem
-        if not any(target_part in b for b in active_branches if b):
-            log(f"LOCK_RELEASED {lock.name} - no active Archon run holds it any more")
+        run_id = lock_run_id(lock)
+        status = status_by_id.get(run_id)
+        if status is None:
+            continue        # outside the window the engine reported; unknown, so keep
+        if status in SETTLED_STATUSES:
+            log(f"LOCK_RELEASED {lock.name} - run {run_id[:8]} is {status}")
             lock.unlink(missing_ok=True)
 
 

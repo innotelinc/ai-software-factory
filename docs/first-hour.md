@@ -219,6 +219,19 @@ darkfactory tick          # should refuse to dispatch anything
 darkfactory resume
 ```
 
+Then the remote half, which is the one you will actually reach for, because it works
+from a phone:
+
+```bash
+gh issue edit <any open issue> --add-label factory:stop
+```
+
+**It is one tick behind.** GitHub does not guarantee you read your own write
+immediately, so the tick right after you add the label can still dispatch. The local
+file is instant and the label is eventually-instant; that is the trade for a button
+that works when you are not at the machine. If you need it stopped *now* and you are
+at the machine, use the file.
+
 **A stop button that has never been used is a stop button nobody knows works.** Write
 the date in `FACTORY.md`.
 

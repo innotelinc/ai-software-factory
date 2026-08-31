@@ -258,6 +258,26 @@ def main(argv: list[str]) -> int:
     r.add(OK if not missing_wf else FAIL, "workflow pack",
           f"{len(found)} workflows" if not missing_wf else "missing: " + " ".join(missing_wf), 1)
 
+    # --- the factory's own machinery -----------------------------------------
+    # Everything else in this audit checks what the factory was given. This checks
+    # what the factory IS. A dispatcher that mis-decides which laps are alive
+    # produces a repository that looks exactly like a quiet one.
+    st = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "_selftest.py"), "--quiet"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+    )
+    marker = (st.stdout or "").strip().splitlines()[-1] if (st.stdout or "").strip() else ""
+    if marker.startswith("SELFTEST_PASSED"):
+        r.add(OK, "machinery self-test", marker.split("checks=")[-1] + " invariants hold")
+    else:
+        r.add(
+            FAIL, "machinery self-test",
+            (marker or "did not run") + " -- run `python factory/_selftest.py` for the list. "
+            "The parts that decide what is alive, what passed, and what may move are "
+            "not behaving as written",
+            1,
+        )
+
     # --- the escalation channel ----------------------------------------------
     if config.NOTIFY_CMD:
         r.add(OK, "escalation channel", config.NOTIFY_CMD[:60])

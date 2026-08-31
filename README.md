@@ -127,6 +127,15 @@ are not:
   as stopped.
 - **The gate overrides the judge.** When the raw markers and the verdict disagree, the
   raw output wins and the PR escalates.
+- **An unknown is never a pass.** Not in the gate, and not in the machinery either.
+  When the dispatcher cannot get a straight answer about whether a run is alive, it
+  keeps the lock. The version that guessed released every lock one tick after it was
+  taken and escalated running work as dead, and nothing errored while it did.
+
+And the part that checks the checker: `factory/_selftest.py` pins the invariants of the
+factory's own parts — what counts as alive, what counts as passed, what may move — and
+`doctor` runs it on every audit. Everything else here asks whether your software works.
+That asks whether the thing deciding it does.
 
 ---
 
@@ -198,8 +207,10 @@ recording from the first lap.
 ```
 bin/darkfactory.py     the CLI
 bin/sync-to.py         push template fixes into a repo that already installed
+bin/audit.py           cross-file invariants no single file can check alone
 template/              what init copies in
   factory/             the runtime: dispatcher, state machine, guard, gate, merge
+  factory/_selftest.py the harness for that runtime, run by `doctor`
   harness/             component 5's plumbing. Every assertion in it is yours to write
   .archon/workflows/   the five workflows, their prompts and their scripts
   MISSION.md           yours
