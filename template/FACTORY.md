@@ -57,6 +57,9 @@ These are the ones a model cannot argue past:
    diff that cannot be computed is not a diff that was checked.
 4. **`factory/state.py`** — the transition table. A node that wants a move the table
    forbids has misunderstood something, and inventing the transition would bury it.
+5. **`factory/_selftest.py`** — and this one checks the four above. What counts as
+   alive, what counts as passed, what may move: each was once wrong in a way that read
+   as a quiet, healthy repository. `doctor` runs it on every audit.
 
 ---
 

@@ -130,6 +130,19 @@ down instead.
 
 ---
 
+## 4b. The one thing you do not have to build
+
+`factory/_selftest.py` ships done, and `doctor` runs it every time. It is the mutation
+set aimed at the **factory** rather than at your software: an empty run list must keep
+a lock, an unrecognised status must keep a lock, `needs-human` must stay terminal, an
+empty log must yield no counts.
+
+You do not write these. You do need to know they are running, because the failures they
+pin do not look like failures — a dispatcher that mis-decides which laps are alive
+produces a repository that looks exactly like a quiet one.
+
+---
+
 ## 5. The ratchet
 
 Set the floors to what the gate just actually asserted. Then understand the one
