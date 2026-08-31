@@ -171,6 +171,14 @@ harness got better*.
 So slack here **pins the dial** rather than printing a note. A note gets read once, by
 the person who already knew.
 
+**And the hold is a state, not a note.** A held PR gets `factory:held`, which nothing
+dispatches and no node may leave; `darkfactory status` names it on its own line. The
+first version of this posted the explanation as a PR comment and set the PR to
+`passed` — the dispatcher merged it forty-five seconds later, because `passed` is what
+a mergeable PR is called. When you clear a hold, you do it by raising the floor or
+accepting the assumptions and then `state=open`, which sends it back for a fresh
+validation rather than merging the judgement you were holding.
+
 ---
 
 ## 6. The escalation channel
