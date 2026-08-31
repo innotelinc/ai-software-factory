@@ -17,6 +17,11 @@ changed. A sync that did nothing says so.
 IT NEVER TOUCHES THE THREE THINGS THAT ARE YOURS: MISSION.md, harness/e2e.py and
 .factory/holdout/. Those are the product, not the machinery, and overwriting them
 with a scaffold is the one thing this must never do.
+
+AND IT NEVER OVERWRITES A PROMPT YOU REWROTE. The node prompts and the skills are
+the personalisation layer; they are add-only here, installed when missing and left
+alone when present. "Missing" and "edited" are different questions, so a new prompt
+still reaches an existing install.
 """
 
 from __future__ import annotations
