@@ -319,9 +319,18 @@ def main(argv: list[str]) -> int:
     # have caught it -- 50 observed against a floor of 56 -- but not until the next
     # validation or the weekly regression, which is days of a green-looking repository
     # with a feature silently removed.
-    rc_f, _ = git("fetch", "--quiet", "origin", config.BASE_BRANCH)
+    rc_f, fetch_out = git("fetch", "--quiet", "origin", config.BASE_BRANCH)
     rc_b, behind = git("rev-list", "--count", f"HEAD..origin/{config.BASE_BRANCH}")
-    if rc_f == 0 and rc_b == 0 and behind.strip().isdigit() and int(behind.strip()) > 0:
+    if rc_f != 0 or rc_b != 0 or not behind.strip().isdigit():
+        # UNANSWERED IS NOT CURRENT. The first version fell through to the OK branch
+        # whenever the fetch failed -- so being offline, or having no remote, printed
+        # "level with origin/main" about a tree it had not compared to anything. That
+        # is the same empty-is-not-pass failure this file exists to check for, in the
+        # check itself, written the same afternoon.
+        r.add(WARN, "checkout freshness",
+              "could not compare with origin (" + (fetch_out.strip().splitlines()[-1]
+              if fetch_out.strip() else "no output") + ") -- unknown, not current")
+    elif int(behind.strip()) > 0:
         r.add(
             FAIL, "checkout is stale",
             f"{behind.strip()} commit(s) behind origin/{config.BASE_BRANCH} -- the factory "

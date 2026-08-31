@@ -209,6 +209,28 @@ And it gets its own line in `darkfactory status`. A hold is the one outcome that
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
+### The staleness check that called an unanswered question "current"
+
+**What happened.** The check added *the same afternoon* to catch a stale checkout read:
+
+```python
+if rc_fetch == 0 and rc_count == 0 and behind > 0:  ...stale...
+else:                                               ...OK, "level with origin/main"...
+```
+
+A failed fetch — offline, no remote, a branch that does not exist — took the `else`.
+It printed **"checkout is current"** about a tree it had not compared to anything.
+
+**Why this one is worth its own entry.** It is the exact failure this entire system is
+built to prevent, written by someone who had spent the day fixing instances of it, into
+the check whose whole purpose is catching it. "Did the comparison say we are behind?"
+and "did the comparison happen?" are different questions, and collapsing them is the
+default shape of an `if/else`.
+
+**The rule.** Three branches, never two: **behind**, **level**, and **could not tell**.
+Any check with a network call, a subprocess, or a parse in it has a third answer, and
+the language will happily let you write only two.
+
 ### The default branch that was assumed, in a product whose pitch is "install it into your repo"
 
 **What happened.** `main` was a string literal in a dozen places across the merge and
