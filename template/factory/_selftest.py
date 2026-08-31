@@ -331,6 +331,23 @@ def enforcement_checks() -> None:
         except state.IllegalTransition:
             check("passed cannot be re-claimed for validation", True)
 
+        # THE HOLD MUST BE A STATE, NOT A SENTENCE. The gate used to print
+        # "merge HELD", set the PR to `passed`, and the dispatcher merged it
+        # forty-five seconds later -- because `passed` is what a mergeable PR is
+        # called and the dispatcher reads states, not prose.
+        check("held exists as a state", "held" in state.TRANSITIONS)
+        check("held has its own label", state.LABEL_FOR_STATE.get("held") is not None,
+              "a hold nobody can see on the PR is not a hold")
+        check("held is not mergeable", "merged" not in state.TRANSITIONS.get("held", set()),
+              "the dispatcher would merge the thing the gate held")
+        check("held resumes only through open",
+              state.TRANSITIONS.get("held", set()) == {"open", "needs-human", "rejected"},
+              "a human raises the floor or accepts the assumptions, then it revalidates")
+        gate_src = (Path(__file__).resolve().parent / "gate.py").read_text(encoding="utf-8")
+        check("the gate writes held rather than passed when it holds",
+              'state.set_state(target, "held")' in gate_src,
+              "the hold would be a comment and the next tick would merge it")
+
         at("open")
         before = len(writes)
         state.set_state("gh:pr:1", "open")

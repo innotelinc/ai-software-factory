@@ -396,13 +396,19 @@ def main(argv: list[str]) -> int:
             # reasons -- a missing label on a fresh factory, or a concurrent
             # escalation that makes the move illegal. Unguarded, the gate ends in a
             # traceback and the PR sits in `validating` with nothing holding it.
+            # `held`, NOT `passed`. This is the whole hold, and it used to be a
+            # sentence: the gate printed "merge HELD", set the PR to `passed`, and the
+            # dispatcher merged it forty-five seconds later -- because `passed` is
+            # what a mergeable PR is called, and the dispatcher reads states, not
+            # prose. The most subtle gate in the system was defeated by the most
+            # obvious one, and it looked exactly like a clean unattended lap.
             try:
-                state.set_state(target, "passed")
+                state.set_state(target, "held")
             except Exception as e:  # noqa: BLE001
                 return fail(
                     target,
                     f"the gate passed with the merge held, but the state could not be "
-                    f"written ({e}); a held PR nothing can read is a stalled PR",
+                    f"written ({e}) -- and a hold nothing can read is not a hold",
                 )
             body = [
                 "## Factory Gate: PASS, merge HELD",

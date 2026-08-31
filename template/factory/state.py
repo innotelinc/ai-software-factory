@@ -86,7 +86,21 @@ TRANSITIONS: dict[str, set[str]] = {
     # disposition is reachable. It is NOT a state any node may leave in place.
     "closed-unlabelled": {"done", "deferred", "rejected", "needs-human"},
     "open": {"validating", "needs-human"},
-    "validating": {"passed", "failed", "rejected", "needs-human"},
+    "validating": {"passed", "held", "failed", "rejected", "needs-human"},
+    # HELD. Green on every structural check, and waiting for a person to agree with
+    # a call the factory made -- ratchet slack, an uncalibrated threshold, a recorded
+    # assumption. It is NOT a failure and NOT needs-human: nothing is wrong and the
+    # factory carries on with other work.
+    #
+    # It exists because the hold used to be a sentence in a PR comment. The gate
+    # printed "merge HELD", set the PR to `passed`, and the dispatcher merged it
+    # forty-five seconds later -- because `passed` is what a mergeable PR is called.
+    # The most subtle gate in the system was defeated by the most obvious one.
+    #
+    # `held -> open` is the resume: a human raises the floor or accepts the
+    # assumptions, and the next validation produces no hold. Only a human moves it,
+    # which is the entire point.
+    "held": {"open", "needs-human", "rejected"},
     # `failed -> open`, and not `-> validating`. A fixed PR is a PR waiting to be
     # validated, and `open` is what waiting-to-be-validated is called. `validating`
     # is owned by a running validation and nothing else may hand it out.
@@ -111,6 +125,7 @@ LABEL_FOR_STATE = {
     "validating": "factory:validating",
     "passed": "factory:approved",
     "failed": "factory:needs-fix",
+    "held": "factory:held",
     "merged": "factory:merged",
 }
 
@@ -121,6 +136,7 @@ LABELS = [
     ("factory:validating", "5319e7", "A validation owns this PR right now."),
     ("factory:needs-fix", "d93f0b", "The validator asked for changes. Under the attempt cap."),
     ("factory:approved", "0e8a16", "Passed every structural gate."),
+    ("factory:held", "fbca04", "Green, but waiting for a person to agree with a call the factory made. Not a failure."),
     ("factory:merged", "6f42c1", "Merged by factory/merge.py."),
     ("factory:done", "0e8a16", "The issue its PR closed is finished."),
     ("factory:needs-human", "b60205", "Stopped. The only state that should reach a person."),

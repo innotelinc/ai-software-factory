@@ -51,12 +51,18 @@ DEFECTS = [
     ("the level-3 markers stop following the dial", "factory/config.py",
      "if AUTONOMY >= 3:", "if False:", True),
     ("a state write loses its try/except", "factory/gate.py",
-     "            try:" + NEWLINE + '                state.set_state(target, "passed")',
-     '            state.set_state(target, "passed")', True),
+     "            try:" + NEWLINE + '                state.set_state(target, "held")',
+     '            state.set_state(target, "held")', True),
     ("the deploy gate stops requiring markers", "factory/deploy.py",
      "    if not config.HEALTH_MARKERS:", "    if False:", True),
     ("the reaper consults the pid on a lock that names a run", "factory/dispatch.py",
      "        if lock_run_id(lock):", "        if False:", True),
+    ("the hold becomes a sentence again", "factory/gate.py",
+     '                state.set_state(target, "held")',
+     '                state.set_state(target, "passed")', True),
+    ("held becomes mergeable", "factory/state.py",
+     '    "held": {"open", "needs-human", "rejected"},',
+     '    "held": {"open", "needs-human", "rejected", "merged"},', True),
     # NOT APPLICABLE, and stated rather than dropped. Removing the empty-list guard
     # changes nothing observable: an empty `status_by_id` means every lookup returns
     # None, and the per-lock "not in the reported window, so keep it" rule already

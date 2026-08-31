@@ -173,6 +173,42 @@ identifier; it was a name this code invented and hoped the engine would echo bac
 run id is printed by the dispatch and recorded on the lock, so the question asked is
 about the same object the answer is about.
 
+### The hold that was only a sentence
+
+**What happened.** A lap ran cleanly and unattended: issue triaged, PR opened, gate
+green, merged, issue closed. Reading the PR afterwards, the gate's own comment said:
+
+```
+## Factory Gate: PASS, merge HELD
+Auto-merge is held because: ratchet slack (unit_tests+10); 63 recorded assumption(s).
+```
+
+It was merged forty-five seconds after that comment was posted.
+
+**The cause.** The hold was a sentence. `gate.py` computed `automerge = False`,
+composed a careful explanation, posted it — and then set the PR's state to `passed`,
+because that is what a PR that passed every check is called. The dispatcher reads
+states, not prose. `passed` is exactly what it merges.
+
+**The most subtle gate in the system was defeated by the most obvious one**, and the
+result looked like a clean unattended lap. Nothing errored, nothing escalated, and the
+only trace was a comment nobody had to read.
+
+Worth noting how it survived earlier testing: every previous hold happened while a
+human was driving the workflows by hand. The hold was never once put in front of a
+running dispatcher until the factory was left alone.
+
+**The rule.** A hold is a **state**, not a message. `held` has its own label, is
+reachable only from `validating`, and leaves only through `open` — which no node may
+do, so a human raising the floor or accepting the assumptions is the single way
+forward. `next_action` has no branch for it, so the factory carries on with other work
+and the PR waits, which is the whole intent: a hold does not stop the factory, it stops
+that merge.
+
+And it gets its own line in `darkfactory status`. A hold is the one outcome that is
+neither a failure nor an escalation — nothing is wrong — which makes it the easiest
+thing in the system to never look at.
+
 ### The reaper whose docstring explained why it was safe, in a system where that was false
 
 **What happened.** With the lock-release path fixed, an implement lap was escalated as

@@ -653,6 +653,21 @@ def cmd_status(args: argparse.Namespace) -> int:
     except Exception as e:  # noqa: BLE001
         say(f"  next          unavailable: {e}")
 
+    # HELD PRS, named. A hold is the one outcome that is neither a failure nor an
+    # escalation: nothing is wrong, the factory carries on, and a person has to agree
+    # with a call it made. That makes it the easiest thing in the system to never
+    # look at, so it gets its own line rather than living in a PR comment.
+    try:
+        held = [p_["_target"] for p_ in state._list("prs", "held")]
+    except Exception:  # noqa: BLE001
+        held = []
+    if held:
+        say()
+        say(f"  held for you ({len(held)}) -- green, waiting for you to agree:")
+        for tgt in held:
+            say(f"    {tgt}  (read the gate comment, then: python factory/state.py "
+                f"set {tgt} state=open to revalidate)")
+
     if config.NEEDS_HUMAN.exists():
         lines = [ln for ln in config.NEEDS_HUMAN.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
         if lines:

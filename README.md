@@ -155,6 +155,12 @@ nobody has calibrated, and **ratchet slack** — the harness asserting more than
 floor requires, which is exactly how many assertions could be deleted with the gate
 still green.
 
+**A hold is a state, not a message.** The PR gets `factory:held`, which nothing
+dispatches and no node may leave — a human raises the floor or accepts the
+assumptions, and the next validation produces no hold. The first version wrote the
+explanation into a comment and set the PR to `passed`; the dispatcher merged it
+forty-five seconds later, because `passed` is what a mergeable PR is called.
+
 ---
 
 ## Commands
