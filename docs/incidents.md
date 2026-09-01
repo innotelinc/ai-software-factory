@@ -876,3 +876,39 @@ enforcer did not look like a document.
 **The general lesson.** Ask of every check: *whose copy is running?* A validator that
 loads any part of itself from the artefact under test has no integrity, however good its
 logic is. This one had excellent logic. It printed the violations before allowing them.
+
+
+## Three dispatchers, one merge
+
+The first fully autonomous merge worked: the gate passed the PR, the dispatcher merged
+it, the code landed. The records said the opposite -- a merged pull request labelled
+`needs-human`, beside its closed issue -- and the loop log showed three `MERGE`
+dispatches inside three seconds.
+
+Three copies of the loop were running. Stopping the wrapper that launches it did not
+always take the bash child with it, so every restart left one behind. Two of the three
+merges were refused because GitHub had already merged the PR, and each refusal
+escalated a pull request that had in fact merged perfectly.
+
+**The per-target lock is not a mutex between dispatchers.** It makes ONE dispatcher
+safe against itself, which is what it was written for, and the merge path does not take
+one at all. Nothing in the design ever said "only one of me may run", because until
+somebody restarts the loop carelessly, only one ever does.
+
+The loop is now a singleton: a pid file, a liveness check, and a trap that clears it on
+any exit. A STALE pid file is cleared rather than obeyed, because the usual way one is
+left behind is the machine dying -- exactly when the loop needs to come back on its own.
+Both directions are verified: stale file cleared and started, live loop refused with the
+holder's pid named.
+
+**And the feature that never ran.** The same merge revealed that the floor auto-raise
+had never been invoked. There are TWO paths to a merge: the gate merges after a green
+validation and hands the observed counts over in an env var, and the DISPATCHER merges
+whenever it finds a PR already in `passed` -- with no counts, because it never ran a
+gate. The dispatcher path is the one that ran. The auto-raise was present, correct, and
+simply not on that road, so the floor stayed at 66 while main moved to 70.
+
+The lesson is narrow and worth keeping: **when a capability is invoked from one call
+site, ask what the OTHER call sites do.** A feature tested on the path you thought about
+is a feature that exists on that path only. The counts are now written to disk as well
+as passed in the environment, so both producers reach the one consumer.

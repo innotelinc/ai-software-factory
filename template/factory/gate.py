@@ -21,7 +21,6 @@ Exit codes:
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -104,7 +103,19 @@ def read_floor() -> dict:
         raw = json.loads(config.FLOOR_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    return {k: v for k, v in raw.items() if isinstance(v, int) and not k.startswith("_")}
+    # `_MAX` KEYS ARE CEILINGS, NOT FLOORS, and missing this cost a blocked PR.
+    #
+    # I taught `harness/ci.ts` to skip them and forgot this reader, which is the other
+    # half of the same ratchet. The gate then demanded a count for `UNCALIBRATED_MAX`,
+    # no rung emits a marker by that name, and it escalated PR #15 and its issue with:
+    # "a floor nothing measures is a floor nobody is held to". That message is exactly
+    # right and it was aimed at a key that is not a floor.
+    #
+    # Two readers of one file is the shape of the bug: a change to what the file MEANS
+    # has to land in every place that reads it, and one of them was in TypeScript in
+    # another directory. `bin/audit.py` now checks the pair agree.
+    return {k: v for k, v in raw.items()
+            if isinstance(v, int) and not k.startswith("_") and not k.endswith("_MAX")}
 
 
 def counted(log: str, marker: str) -> int | None:
@@ -546,6 +557,21 @@ def main(argv: list[str]) -> int:
                 f"the gate passed but the verdict could not be recorded ({e}); refusing "
                 f"to merge something whose state was never written",
             )
+        # PERSIST THE COUNTS, because there are TWO paths to a merge and only one of
+        # them comes through here. This function hands them to merge.py in an env var;
+        # the DISPATCHER also merges, whenever it finds a PR already in `passed`, and it
+        # has no counts to hand over because it never ran a gate. That is the path that
+        # actually ran for PR #15, so the floor did not move and the slack the auto-raise
+        # exists to close survived the merge that should have closed it.
+        #
+        # Keyed by target and written next to the findings, so either path can find it.
+        try:
+            config.FINDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            (config.FINDINGS_DIR / f"{re.sub(r'[/.:\\]', '-', target)}.counts.json").write_text(
+                json.dumps(obs, indent=2), encoding="utf-8")
+        except OSError as e:  # noqa: BLE001
+            print(f"COUNTS_NOT_SAVED {e} - a dispatcher-side merge will not raise the floor")
+
         mut = f", mutations {caught}/{total}" if total is not None else ""
         print(f"GATE_PASS pr={target} markers green, e2e steps={steps}{mut}")
 

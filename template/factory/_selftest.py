@@ -858,6 +858,39 @@ def assumption_count_checks() -> None:
           "because seven of them are uncalibrated on main by design")
 
 
+def floor_reader_agreement_checks() -> None:
+    """Both readers of floor.json must exclude the same things.
+
+    `floor.json` is read TWICE by different languages in different directories:
+    `factory/gate.py` decides whether to hold a merge, and `harness/ci.ts` decides
+    whether the gate goes red. Adding `UNCALIBRATED_MAX` -- a CEILING rather than a
+    floor -- meant teaching both to skip `_MAX`, and only one got taught. The gate then
+    demanded a count for a key no rung emits and escalated a green PR with "a floor
+    nothing measures is a floor nobody is held to", which is a correct sentence aimed
+    at something that is not a floor.
+
+    A change to what a shared file MEANS has to land in every reader of it, and the
+    other reader here was in another language in another directory, which is precisely
+    why nothing pointed at it.
+    """
+    import gate as _gate
+    floor = _gate.read_floor()
+    check("the gate excludes ceilings from the floors it enforces",
+          not any(k.endswith("_MAX") for k in floor),
+          f"gate.read_floor returned {sorted(k for k in floor if k.endswith('_MAX'))}")
+    check("the gate excludes prose keys",
+          not any(k.startswith("_") for k in floor))
+    ci = config.SHARED / "harness" / "ci.ts"
+    if ci.exists():
+        src = ci.read_text(encoding="utf-8", errors="replace")
+        check("the harness reader excludes ceilings too",
+              'endsWith("_MAX")' in src,
+              "harness/ci.ts would treat a ceiling as a floor and demand a marker for "
+              "it, which is the same bug on the other side of the language boundary")
+        check("the harness reader excludes prose keys too",
+              'startsWith("_")' in src)
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     # POINT THE LEDGER SOMEWHERE HARMLESS FOR THE WHOLE RUN, before any check fires.
@@ -880,9 +913,10 @@ def main() -> int:
     ledger_isolation_checks()
     size_cap_checks()
     run_resolution_checks()
-    assumption_count_checks()
-    uncalibrated_ceiling_checks()
     ratchet_raise_checks()
+    uncalibrated_ceiling_checks()
+    assumption_count_checks()
+    floor_reader_agreement_checks()
 
     if FAILURES:
         if not quiet:

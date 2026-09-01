@@ -124,6 +124,25 @@ def raise_floor(holder: str) -> str:
     """
     raw = os.environ.get("FACTORY_OBSERVED_COUNTS", "")
     if not raw:
+        # THE OTHER MERGE PATH. gate.py hands the counts over in an env var when it
+        # merges; the DISPATCHER also merges, whenever it finds a PR already in
+        # `passed`, and it never ran a gate so it has nothing to hand over. That is the
+        # path that merged PR #15, and the floor silently did not move -- the auto-raise
+        # was there, correct, and simply never invoked.
+        #
+        # So the gate writes the counts to disk as well, and this reads them when the
+        # env var is absent. Two producers, one consumer, and the consumer must work for
+        # both or the feature only exists on the path you happened to test.
+        try:
+            import re as _re
+            key = _re.sub(r"[/.:\]", "-", os.environ.get("FACTORY_MERGE_TARGET", "")) or None
+            if key:
+                cand = config.FINDINGS_DIR / f"{key}.counts.json"
+                if cand.exists():
+                    raw = cand.read_text(encoding="utf-8")
+        except (OSError, AttributeError):
+            raw = ""
+    if not raw:
         return ""
     try:
         obs = {k: int(v) for k, v in json.loads(raw).items()}
@@ -393,6 +412,7 @@ def main(argv: list[str]) -> int:
     # wrongly reported as failed invites someone to re-run work that already shipped.
     if holder:
         try:
+            os.environ.setdefault("FACTORY_MERGE_TARGET", target)
             raised = raise_floor(holder)
             if raised:
                 print(f"RATCHET_RAISED {raised}")
