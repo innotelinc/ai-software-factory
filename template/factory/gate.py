@@ -327,12 +327,23 @@ def main(argv: list[str]) -> int:
     automerge = True
     held_why: list[str] = []
 
-    # SLACK BLOCKS THE DIAL. The gap between observed and floor is exactly the
-    # number of assertions that can be deleted with the gate still green, and it
-    # GROWS as the harness improves, because raising the floor is a protected edit
-    # the factory cannot make. Measured on a real factory, that hole went from 7 to
-    # 33 in one cycle BECAUSE the harness got better. Printing it as a note and
-    # carrying on is how it widens forever, so here it pins autonomy instead.
+    # SLACK NO LONGER BLOCKS THE DIAL, because merge.py CLOSES it. Off by default.
+    #
+    # The gap between observed and floor is exactly the number of assertions that can
+    # be deleted with the gate still green, and it used to GROW as the harness improved
+    # -- measured on a real factory, from 7 to 33 in one cycle BECAUSE the harness got
+    # better -- because only a human could raise a protected file. Holding here was the
+    # answer to that, and it was the wrong one: it made a change that ADDS tests the
+    # case that needs a person, so on a good day the factory stopped completely.
+    #
+    # The gap cannot widen now. Every merge raises each floor to what the gate observed
+    # on the tree that landed, monotonically, so slack is closed in the same breath as
+    # the merge that opened it. It still PRINTS on every run and `doctor` reports it, so
+    # a raise that failed to land is visible without being a brake.
+    #
+    # The flag remains for a factory that wants the old behaviour, and it cannot be
+    # turned on together with the auto-raise without deadlocking: the gate decides
+    # `automerge` BEFORE merge.py runs, so the slack is always present at that moment.
     if slack and config.SLACK_CAPS_AUTONOMY:
         automerge = False
         held_why.append(
