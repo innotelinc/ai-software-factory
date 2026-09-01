@@ -156,7 +156,19 @@ def main(argv: list[str]) -> int:
     # So a mission with seven carefully argued exclusions was reported as "0 entries --
     # fewer than five is too thin", which is the opposite of true and trains the reader
     # to ignore the warning.
-    _oos = mission.split("Out of scope")[-1].split("##")[0] if "Out of scope" in mission else ""
+    # ANCHOR ON THE HEADING, not on the phrase.
+    #
+    # This split on every occurrence of "Out of scope" and took the LAST one. The phrase
+    # is ordinary English and appears in prose: a real MISSION said "Out of scope for
+    # this slice, but the feedback set names a sound event" under Open questions, so the
+    # segment read was the tail of THAT section and the count came back 2 for a list of
+    # nine. Same shape as the assumption counter that counted lines: the check was
+    # correct about the wrong text.
+    #
+    # A heading is the only unambiguous marker of where the list starts, and the next
+    # heading of any level is where it ends.
+    _m = re.search(r"^#{1,6}\s+.*out of scope.*$", mission, re.M | re.I)
+    _oos = re.split(r"^#{1,6}\s", mission[_m.end():], maxsplit=1, flags=re.M)[0] if _m else ""
     out_of_scope = len(re.findall(r"^\s*(?:[-*]|\d+[.)])\s+\S", _oos, re.M))
     if out_of_scope >= 5:
         r.add(OK, "out-of-scope list", f"{out_of_scope} entries")

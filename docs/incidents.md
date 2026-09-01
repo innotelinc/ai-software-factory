@@ -912,3 +912,38 @@ The lesson is narrow and worth keeping: **when a capability is invoked from one 
 site, ask what the OTHER call sites do.** A feature tested on the path you thought about
 is a feature that exists on that path only. The counts are now written to disk as well
 as passed in the environment, so both producers reach the one consumer.
+
+
+## Three checks that measured the wrong text
+
+Not one incident but a pattern, and it is the most useful thing the clean-room install
+turned up. Three separate checks were correct code aimed at the wrong bytes, and every
+one of them read as working:
+
+**The assumption count counted LINES.** The format is `KEY=value` followed by an
+indented WHY paragraph, so seven assumptions were reported as sixty-nine and eight as
+eighty. On every pull request ever opened. A hold that says "80 recorded assumptions"
+is a hold nobody reviews.
+
+**The out-of-scope count matched only `-` and `*` bullets.** Both real MISSION files
+use a NUMBERED list, because the prose refers to "out-of-scope item 7". So a mission
+with nine carefully argued exclusions reported "0 entries -- fewer than five is too
+thin", which is the opposite of true.
+
+**And when that was fixed it reported 2, not 9.** The check took
+`mission.split("Out of scope")[-1]`, and "Out of scope" is ordinary English that
+appears in prose: one MISSION said "Out of scope for this slice, but the feedback set
+names a sound event" under Open questions, so the segment being counted was the tail of
+THAT section. The fix is to anchor on the HEADING -- the only unambiguous marker of
+where a section starts -- and end at the next heading of any level.
+
+**What they share.** Each check ran, produced a number, and printed a confident
+sentence. None of them was broken in a way a test would catch, because each was
+perfectly correct about the text it was actually looking at. The bug was upstream of
+the logic, in what got selected.
+
+**What to do about it.** When a check parses a document, assert the SELECTION and not
+just the verdict. "Nine entries" is a testable claim about a known file; "the warning
+did not fire" is not. Two of the three were found only by writing a real MISSION into a
+real install -- neither was reachable from this repository, because this repository has
+no MISSION of its own to parse.
