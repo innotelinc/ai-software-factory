@@ -776,3 +776,57 @@ live failure -- the plumbing is the part that is hard to fix under pressure.
 **The generalisation.** A value that answers one question is not thereby an answer to
 a neighbouring one. When a sentinel earns its meaning in a specific decision, check
 every OTHER decision that reads the same field before adding it to a shared set.
+
+
+## The autonomous factory that needed a human for everything
+
+Cole watched a session and said the factory did not look like it was running through
+GitHub at all. The wiring was fine -- issues in, `factory:*` labels as the state, PRs
+out, every transition a `gh` call. What he was actually seeing is that a human touched
+every single merge. In one session the hold rate was **100%**, and all three hold rules
+turned out to be wrong, each in a different way.
+
+**1. The assumption count was reporting ten times the real number.** The hold message
+counted non-blank LINES of a file whose format is one `KEY=value` followed by an
+indented WHY paragraph. Seven assumptions were reported as sixty-nine; eight as eighty.
+On every pull request ever opened.
+
+That number is the first thing a person reads on a hold. "80 recorded assumptions"
+reads as a wall nobody can review; "8" reads as an afternoon. The hold was never too
+strict -- it was describing itself as ten times its size, and a review that looks
+impossible gets rubber-stamped, which is worse than no hold because it manufactures
+assurance.
+
+**2. Ratchet slack held the merge that would have closed it.** Slack is how many
+assertions could be deleted with the gate still green, and it grew because only a human
+could close it, so the gate held on it. Correct instinct, wrong remedy: it made the
+SUCCESS case -- a change that ADDS tests -- the case that needs a human. Four PRs in
+one session were held on slack alone and took four separate commits to release while
+the factory sat idle.
+
+The merge now closes the gap in the same breath as the merge that opened it. What makes
+that safe is that the raise is **monotonic**: only up, only keys the floor already has,
+never a ceiling. A pull request touching `floor.json` is still auto-rejected, so "the
+floor never falls without a human" -- which IS the ratchet -- is untouched. Only the
+direction that tightens was automated.
+
+**3. The uncalibrated hold had never once fired.** It matched `NAME_UNCALIBRATED=<n>`
+while the harness prints `FAILED=0 UNCALIBRATED=5`. A space, not an underscore. A
+deliberate safety gate, dead since the day it was written.
+
+And repairing the regex alone would have been **worse than leaving it dead**: margins
+are uncalibrated by design, so "any exist" refuses every auto-merge forever -- not a
+signal, a global off switch, with the dial reading 3 and behaving like 0. It is now a
+CEILING, the mirror of the floors: check counts may not fall, unmeasured margins may not
+rise. What it catches is a change that INTRODUCES a threshold nobody chose.
+
+**The pattern worth taking away.** Every one of these was a hold that fired on the wrong
+thing, and none of them looked wrong from inside the code. You cannot find them by
+reading the hold rules; you find them by asking what fraction of work is being held and
+why, which is a question only running the factory for a day can answer. **A gate's error
+rate is a measurement, not a design property.** If the honest answer to "how often does
+this hold?" is "always", the gate is an off switch whatever its docstring says.
+
+A useful corollary: two of the three needed CALL-SITE checks to pin. Unit checks on the
+counting function passed happily while the gate counted lines beside it, because the
+tests could see the function and not its caller.
