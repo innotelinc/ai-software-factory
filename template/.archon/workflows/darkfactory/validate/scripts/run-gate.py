@@ -26,6 +26,7 @@ import json
 import os
 import shlex
 import subprocess
+import tempfile
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,7 +39,8 @@ sys.path.insert(0, str(Path.cwd() / "factory"))
 from nodeio import emit, note  # noqa: E402
 
 import config  # noqa: E402
-import guard  # noqa: E402
+# NOTE: `guard` is deliberately NOT imported from this checkout any more.
+# See the block below; it is materialised from the base ref instead.
 import notify  # noqa: E402
 import state  # noqa: E402
 
@@ -79,14 +81,71 @@ tee.write(f"GATE_RUN_START {datetime.now(timezone.utc).isoformat()} target={targ
 # --- 1. the guard, FIRST ------------------------------------------------------
 import io  # noqa: E402
 
-captured = io.StringIO()
-_stdout = sys.stdout
-sys.stdout = captured
-try:
-    guard_rc = guard.main(["--base", base, "--head", "HEAD"])
-finally:
-    sys.stdout = _stdout
-guard_out = captured.getvalue()
+# THE GUARD MUST COME FROM THE BASE BRANCH, NOT FROM THE BRANCH IT IS JUDGING.
+#
+# This used to `import guard` off `Path.cwd()/factory`, which in a validate run is the
+# PULL REQUEST'S OWN CHECKOUT. So the code deciding whether a PR may touch protected
+# files was code the PR could edit, and the whole protected-path mechanism -- the thing
+# that makes merging without review defensible -- was self-referential.
+#
+# It is exploitable in one commit, and was demonstrated: a branch that set UNIT_CHECKS
+# to 1 in the protected ratchet AND changed `if violations:` to `if False:` in guard.py
+# printed
+#
+#     BLOCK  .factory/locks/floor.json
+#     BLOCK  factory/guard.py
+#     PROTECTED_OK
+#
+# and exited 0. It SAW both violations, reported them, and waved itself through, and
+# `PROTECTED_OK` is a required marker so everything downstream was satisfied.
+#
+# The workflow already reads GOVERNANCE from the base branch for exactly this reason
+# ("a PR must not be able to weaken the rulebook it is about to be judged against").
+# The rulebook was protected and the code enforcing it was not, which is the more
+# important half: a rule nothing enforces is a comment.
+#
+# So the guard is materialised from the base ref into a temp directory and run from
+# there. `config._repo_root()` resolves from the CWD, so it still measures the diff in
+# THIS worktree -- trusted code, untrusted subject, which is the right way round.
+_guard_dir = Path(tempfile.mkdtemp(prefix="df-base-guard-"))
+_names = subprocess.run(
+    ["git", "ls-tree", "--name-only", base, "factory/"],
+    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+)
+_materialised = 0
+for _entry in (_names.stdout or "").splitlines():
+    _entry = _entry.strip()
+    if not _entry.endswith(".py"):
+        continue
+    _blob = subprocess.run(
+        ["git", "show", f"{base}:{_entry}"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+    )
+    if _blob.returncode != 0:
+        continue
+    _dest = _guard_dir / Path(_entry).name
+    _dest.write_text(_blob.stdout, encoding="utf-8")
+    _materialised += 1
+
+if not (_guard_dir / "guard.py").exists():
+    # FAIL CLOSED. Being unable to obtain the trusted guard is not permission to use
+    # the untrusted one; that is the whole bug, reintroduced as a fallback.
+    tee.write("\nGATE_FAILED: could not materialise the guard from the base branch\n")
+    tee.flush()
+    note("GUARD_UNAVAILABLE: the base branch's guard could not be read, so nothing was "
+         "checked. Refusing to fall back to the branch's own copy.")
+    emit({"markers_present": False, "exit_code": 2,
+          "summary": "the trusted guard could not be read from the base branch"})
+    raise SystemExit(2)
+
+_guard_run = subprocess.run(
+    [sys.executable, str(_guard_dir / "guard.py"), "--base", base, "--head", "HEAD"],
+    cwd=str(Path.cwd()), capture_output=True, text=True,
+    encoding="utf-8", errors="replace", timeout=600,
+)
+guard_rc = _guard_run.returncode
+guard_out = (_guard_run.stdout or "") + (_guard_run.stderr or "")
+tee.write(f"GUARD_SOURCE base={base} files={_materialised} (trusted, not this branch)\n")
 tee.write(guard_out)
 
 if guard_rc != 0:

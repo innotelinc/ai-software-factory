@@ -830,3 +830,49 @@ this hold?" is "always", the gate is an off switch whatever its docstring says.
 A useful corollary: two of the three needed CALL-SITE checks to pin. Unit checks on the
 counting function passed happily while the gate counted lines beside it, because the
 tests could see the function and not its caller.
+
+
+## The guard could not guard itself
+
+**The most serious defect found in this build.** Every other protection in the factory
+rests on the guard: it is what rejects a pull request that touches the ratchet, the
+holdout, the harness, the workflows or the machinery. It ran from the branch it was
+judging.
+
+`run-gate.py` did `sys.path.insert(0, cwd/"factory")` and then `import guard`. In a
+validate run, that cwd is the PULL REQUEST'S OWN CHECKOUT. So the code deciding whether
+a PR may touch protected files was code that PR could edit.
+
+**Demonstrated in a single commit.** A branch that set `UNIT_CHECKS` to 1 in the
+protected ratchet AND changed `if violations:` to `if False:` in `factory/guard.py`
+produced:
+
+    GUARD_START range=origin/main...HEAD files=2 lines=4
+      BLOCK  .factory/locks/floor.json
+      BLOCK  factory/guard.py
+    GUARD_FILES_CHECKED=2
+    PROTECTED_OK
+    exit 0
+
+It SAW both violations. It named them. Then it waved itself through -- and
+`PROTECTED_OK` is a required marker, so every check downstream was satisfied by a guard
+that had been switched off by the diff it was inspecting.
+
+**The fix.** The guard is materialised from the BASE ref into a temp directory and run
+from there. `config._repo_root()` resolves from the CWD, so it still measures the diff
+in the PR's worktree: trusted code, untrusted subject. The same branch now exits 1 with
+`PROTECTED_VIOLATION=2`.
+
+Being unable to read the trusted guard **fails closed**. Falling back to the branch's
+own copy would be the original bug wearing a fallback's clothes.
+
+**Why it survived so long.** The workflow already read GOVERNANCE from the base branch,
+with a comment explaining that "a PR must not be able to weaken the rulebook it is about
+to be judged against." The rulebook was protected and the code enforcing it was not, and
+the second half is the one that matters: **a rule nothing enforces is a comment.** The
+protection was written for documents and never extended to the enforcer, because the
+enforcer did not look like a document.
+
+**The general lesson.** Ask of every check: *whose copy is running?* A validator that
+loads any part of itself from the artefact under test has no integrity, however good its
+logic is. This one had excellent logic. It printed the violations before allowing them.

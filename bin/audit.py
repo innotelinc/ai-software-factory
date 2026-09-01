@@ -509,6 +509,50 @@ def check_watchdog_wired(root: Path) -> None:
         return
 
 
+def check_guard_is_trusted(root: Path) -> None:
+    """The guard must be run from the BASE branch, never imported from the branch under test.
+
+    This is the root of trust for the entire protected-path mechanism, and it was
+    broken: `run-gate.py` did `sys.path.insert(0, cwd/"factory"); import guard`, and in
+    a validate run the cwd IS the pull request's checkout. The code deciding whether a
+    PR may touch protected files was code that PR could edit.
+
+    Demonstrated in one commit. A branch that set UNIT_CHECKS to 1 in the protected
+    ratchet AND changed `if violations:` to `if False:` in guard.py printed
+
+        BLOCK  .factory/locks/floor.json
+        BLOCK  factory/guard.py
+        PROTECTED_OK
+
+    and exited 0. It saw both violations, named them, and waved itself through --
+    and PROTECTED_OK is a required marker, so everything downstream was satisfied.
+
+    The same branch against a guard materialised from the base ref exits 1 with
+    PROTECTED_VIOLATION=2. Nothing else in the machinery matters if this is wrong: the
+    guard is what makes every other protection real.
+    """
+    runner = root / ".archon" / "workflows" / "darkfactory" / "validate" / "scripts" / "run-gate.py"
+    if not runner.exists():
+        fail("guard is trusted", f"{runner.name} is missing, so nothing runs the guard")
+        return
+    body = code_only(runner.read_text(encoding="utf-8"))
+    if "import guard" in body and "guard.main(" in body:
+        fail("guard is trusted",
+             "run-gate.py imports the guard from the branch under test. A PR that "
+             "neuters factory/guard.py is then judged by its own neutered copy, which "
+             "defeats every protected path at once")
+        return
+    if "ls-tree" not in body or "git" not in body:
+        fail("guard is trusted",
+             "run-gate.py no longer imports the guard, but nothing in it materialises "
+             "the guard from the base ref either -- so it is unclear what is being run")
+        return
+    if "GUARD_UNAVAILABLE" not in body:
+        fail("guard is trusted",
+             "no fail-closed path: being unable to read the trusted guard must abort, "
+             "never fall back to the branch's own copy, which is the original bug")
+
+
 def check_selftest_wired(root: Path) -> None:
     """The machinery self-test must exist, and the doctor must run it.
 
@@ -720,6 +764,7 @@ def main(argv: list[str]) -> int:
     check_deny_lists(root)
     check_selftest_wired(root)
     check_watchdog_wired(root)
+    check_guard_is_trusted(root)
     check_lock_liveness(root)
     check_workflow_state_writes(root)
     check_trigger_parity(root)
