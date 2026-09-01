@@ -126,13 +126,30 @@ FLOOR_SOURCES = {
 }
 
 
-def observed_counts(log: str) -> dict[str, int | None]:
-    return {
+def observed_counts(log: str, floor_keys: "list[str] | None" = None) -> dict[str, int | None]:
+    """What the run log says each floor key measured.
+
+    A KEY THAT NAMES ITS OWN MARKER NEEDS NO MAPPING, and that is now the default.
+    The table above describes this template's example harness; a project with its own
+    vocabulary got "the ratchet has a floor for UNIT_CHECKS but the run log reports no
+    count for it" while the log said `UNIT_CHECKS=64` three lines further up. The
+    floor file and the harness agreed with each other and disagreed only with a lookup
+    table neither of them had heard of.
+
+    So: use the mapping when there is one, and otherwise look for `KEY=<n>`, which is
+    what a harness that named its floor keys after its own markers already emits.
+    """
+    out: dict[str, int | None] = {
         "e2e_steps_asserted": counted(log, "E2E_PASSED steps"),
         "holdout_assertions": counted(log, "assertions"),
         "unit_tests": counted(log, "UNIT_PASSED tests"),
         "mutations_caught": counted(log, "MUTATIONS_CAUGHT"),
     }
+    for key in floor_keys or []:
+        if key in out and out[key] is not None:
+            continue
+        out[key] = counted(log, key)
+    return out
 
 
 def main(argv: list[str]) -> int:
@@ -214,7 +231,7 @@ def main(argv: list[str]) -> int:
 
     # --- 2. counts, not vibes -------------------------------------------------
     floor = read_floor()
-    obs = observed_counts(log)
+    obs = observed_counts(log, list(read_floor().keys()))
     slack: dict[str, int] = {}
     for key, minimum in floor.items():
         got = obs.get(key)
