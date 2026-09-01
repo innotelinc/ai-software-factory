@@ -142,10 +142,7 @@ if prior:
     # plan node never sees; a warning nobody reads is not a warning. The plan prompt
     # names this file.
     (artifacts / "PRIOR-ATTEMPT.md").write_text(
-        "# A previous attempt is already on this branch
-
-" + prior_note + "
-",
+        "# A previous attempt is already on this branch\n\n" + prior_note + "\n",
         encoding="utf-8",
     )
 
