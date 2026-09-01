@@ -1,5 +1,15 @@
 # Appended to your .gitignore by `darkfactory init`.
 
+# THE FACTORY'S OWN BYTECODE. Every factory script is Python, and running one inside a
+# worktree writes `factory/__pycache__/*.pyc` -- inside `factory/`, which is on the
+# PROTECTED list. A builder's `git add -A` then sweeps them in and the guard blocks the
+# change for touching a protected path, which is exactly right and completely useless:
+# the lap dies with five .pyc files named as the violation and the actual work sitting
+# beside them, correct and unmergeable.
+__pycache__/
+*.pyc
+*.pyo
+
 # darkfactory: runtime state, never committed
 .factory/runs/
 .factory/locks-runtime/
