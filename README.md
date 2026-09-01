@@ -239,13 +239,37 @@ darkfactory halt          # the stop button
 ```
 
 And the three that check the factory rather than your software. Run them after editing
-anything under `factory/`:
+anything under `factory/`.
+
+**From this repository**, where the runtime lives under `template/` and `bin/` exists:
 
 ```bash
-python factory/_selftest.py         # the machinery's own invariants (doctor runs it too)
-python bin/audit.py --repo .        # cross-file invariants no single file can check
-python bin/selfcheck-mutations.py   # and: would the self-test know if they broke?
+python template/factory/_selftest.py   # the machinery's own invariants (doctor runs it too)
+python bin/audit.py                    # cross-file invariants no single file can check
+python bin/selfcheck-mutations.py      # and: would the self-test know if they broke?
 ```
+
+**From a repository you installed into**, only the first one is there — `init` copies
+`factory/`, `harness/`, the workflow pack and the governance files, and deliberately
+does not copy `bin/`:
+
+```bash
+cd your-repo && python factory/_selftest.py     # or just `darkfactory doctor`, which runs it
+```
+
+To audit an installed repo, run the auditor **from here** and point it at that repo:
+
+```bash
+python bin/audit.py --repo /path/to/your-repo
+```
+
+<!-- These paths were wrong for a while, in both directions: the block said
+     `python factory/_selftest.py` and `python bin/audit.py --repo .`, and in THIS
+     repository both of those fail -- the first because the runtime is under template/,
+     the second because `--repo .` points the auditor at a root with no factory/ in it.
+     A first command that errors is the same class of defect as a first question that
+     misparses: it is the moment somebody decides whether the rest of this is careful. -->
+
 
 ---
 

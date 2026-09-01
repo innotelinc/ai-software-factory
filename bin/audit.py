@@ -310,7 +310,13 @@ def check_markers(root: Path) -> None:
         emitters += p.read_text(encoding="utf-8", errors="replace")
     for p in (root / ".factory" / "holdout").rglob("*.py"):
         emitters += p.read_text(encoding="utf-8", errors="replace")
-    emitters += (root / "factory" / "guard.py").read_text(encoding="utf-8", errors="replace")
+    # Same shape as the crash in check_workflow_state_writes: the two rglob loops above
+    # are safe on a missing directory, this one is not. It only bites a root that has a
+    # config.py and no guard.py, which is a half-installed factory -- exactly the state
+    # somebody runs an audit to find out about.
+    guard_py = root / "factory" / "guard.py"
+    if guard_py.exists():
+        emitters += guard_py.read_text(encoding="utf-8", errors="replace")
 
     for marker in required:
         if marker not in emitters:
@@ -591,7 +597,18 @@ def check_workflow_state_writes(root: Path) -> None:
     a test failure -- it is a runtime refusal on a path that might not fire for weeks,
     at which point it looks like the factory stalling for no reason.
     """
-    state_src = (root / "factory" / "state.py").read_text(encoding="utf-8")
+    # GUARDED, like every other check here. The first version read this unconditionally
+    # and died with a FileNotFoundError traceback on any root without a factory/ --
+    # which includes this repository, where the factory lives under template/ and where
+    # the README tells you to run `--repo .`. A crash is worse than a finding twice
+    # over: it reports nothing about the check it was doing, and it takes every check
+    # BELOW it down with it (trigger parity and base branch never ran). An audit that
+    # aborts looks the same from the outside as an audit that was never run.
+    state_py = root / "factory" / "state.py"
+    if not state_py.exists():
+        fail("workflow state writes", "factory/state.py is missing")
+        return
+    state_src = state_py.read_text(encoding="utf-8")
     declared = set(re.findall(r'^\s{4}"([a-z-]+)":\s*(?:set\(\)|\{)', state_src, re.M))
     if not declared:
         fail("workflow state writes", "could not read the transition table from state.py")
