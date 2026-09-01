@@ -135,9 +135,32 @@ dark:
   (§7.1).
 - **An uncalibrated threshold** — a check whose margin nobody has set. The factory
   will not invent that number: choosing it is authoring taste in a config file.
-- **Ratchet slack** — the harness now asserts more than the floor requires. The gap
-  is exactly how many assertions could be deleted with the gate still green, so it
-  pins the dial until a human raises the floor.
+- **Ratchet slack** - the harness now asserts more than the floor requires, and the
+  gap is exactly how many assertions could be deleted with the gate still green.
+
+  **This no longer holds the merge.** `factory/merge.py` closes the gap itself, in the
+  same breath as the merge that opened it, raising each floor to the count the gate
+  observed on the tree that just landed. The raise is MONOTONIC: it can only move a
+  number up, it never adds a key the floor did not already have, and it never touches a
+  `_MAX` ceiling. A pull request that modifies `floor.json` is still auto-rejected, so
+  "the floor never falls without a human" - which is the whole ratchet - is unchanged.
+
+  Holding here was the right instinct and the wrong remedy. It made the SUCCESS case,
+  a change that adds tests, the case that needs a human: four pull requests in one
+  session were held on slack alone and took four separate commits to release, while
+  the factory sat idle. Closing the gap automatically is both faster than a human and
+  more honest, because the floor now describes what main has at the moment main comes
+  to have it.
+
+- **An uncalibrated margin that is NEW** - the number of thresholds nobody has set may
+  not rise. `UNCALIBRATED_MAX` in `floor.json` is a ceiling and the mirror of the floors
+  beside it: check counts may not fall, unmeasured margins may not rise.
+
+  It is deliberately not "any uncalibrated margin holds". Seven are uncalibrated on main
+  today and they are uncalibrated BY DESIGN - MISSION open question 1 says each is
+  Cole's to set from a build he has played. Holding on their existence would refuse
+  every auto-merge forever: not a signal, a global off switch, with the dial reading 3
+  and behaving like 0. What holds is a change that INTRODUCES a threshold nobody chose.
 
 None of these fail the run. The PR is built, validated, and waiting.
 

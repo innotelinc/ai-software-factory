@@ -249,11 +249,16 @@ def assess(events: list[dict], now: datetime | None = None,
     # that goes quiet instead of red. So the gap is REPORTED rather than tolerated. It
     # is a WARN, not a HALT: missing cost data is a blind spot, not a runaway, and
     # halting the factory because a price lookup failed would be its own outage.
-    priced = sum(1 for e in settles if e.get("cost_usd") is not None)
-    if settles and priced * 2 < len(settles):
+    # THE DENOMINATOR IS KNOWN SETTLES, not every settle. A `not_found` run is one the
+    # engine has no record of, so it has no cost to report -- counting it as "unpriced"
+    # made this warning permanent, and a warning that never clears is how a monitor
+    # teaches people to ignore it. The same reasoning as UNKNOWN_STATUSES above: no
+    # record is not a measurement, in either direction.
+    priced = sum(1 for e in known_settles if e.get("cost_usd") is not None)
+    if known_settles and priced * 2 < len(known_settles):
         findings.append(Finding(
             "spend-blind", WARN,
-            f"only {priced} of {len(settles)} settled runs carry a cost, so the ${spend:,.2f} "
+            f"only {priced} of {len(known_settles)} settled runs carry a cost, so the ${spend:,.2f} "
             f"the spend detectors are judging is a floor, not the total."))
 
     return findings

@@ -285,6 +285,7 @@ def dispatch(action: str, target: str) -> bool:
         cmd += ["--no-worktree"]
     cmd += ["--detach", f"{action} {target}"]
     log(f"DISPATCH {workflow} {target} -> {logfile.name}")
+    dispatch_started = time.time()
     try:
         with logfile.open("a", encoding="utf-8") as fh:
             fh.write(f"\n=== {datetime.now(timezone.utc).isoformat()} {' '.join(cmd)}\n")
@@ -325,12 +326,18 @@ def dispatch(action: str, target: str) -> bool:
     # keys on this id, because it is the only identifier both sides agree on: the
     # dispatching process exits the moment the run detaches, so its PID says nothing,
     # and the engine's run list does not report the branch.
-    run_id = ""
-    try:
-        m = RUN_ID_RE.search(logfile.read_text(encoding="utf-8", errors="replace")[-4000:])
-        run_id = m.group(1) if m else ""
-    except OSError:
-        pass
+    # ASK THE ENGINE WHICH RUN THIS WAS. The id printed by the CLI is not the run's
+    # id (see resolve_run_id), so the log is only the fallback now, not the source.
+    run_id = resolve_run_id(action, target, dispatch_started)
+    if not run_id:
+        try:
+            m = RUN_ID_RE.search(logfile.read_text(encoding="utf-8", errors="replace")[-4000:])
+            run_id = m.group(1) if m else ""
+        except OSError:
+            pass
+        if run_id:
+            log(f"  ! could not resolve the engine's run id; falling back to the "
+                f"printed one ({run_id[:8]}), which historically does not resolve")
     if run_id:
         with lock.open("a", encoding="utf-8") as fh:
             fh.write("run " + run_id + "\n")
@@ -357,6 +364,87 @@ def lock_age_minutes(lock: Path) -> float:
         return (time.time() - lock.stat().st_mtime) / 60
     except OSError:
         return 0.0
+
+
+def resolve_run_id(action: str, target: str, since_epoch: float,
+                   attempts: int = 4, payload_override: dict | list | None = None) -> str:
+    """The run id the ENGINE gave this dispatch, found by the message we sent it.
+
+    THE PRINTED ID IS NOT THE RUN ID, and everything downstream was keyed on it.
+    `archon workflow run --detach` prints "Run id: X" and even says "Track it with:
+    archon workflow get X" -- and that id appears nowhere in the engine's run record.
+    Measured on four consecutive dispatches: the timestamps matched to the second,
+    the workflow names matched, and the overlap between the ids the factory tracked
+    and the ids the engine had was ZERO.
+
+    Every symptom that cost hours today traces back here. Lock liveness could never be
+    answered, so locks sat until the 180-minute stale cap. No run ever read back as
+    `completed`, so the watchdog's progress detectors had nothing to see and its spend
+    detectors had no cost to add up. Each of those looked like its own bug and got its
+    own patch; they were one bug wearing three hats.
+
+    So the id is resolved by the one key the factory itself controls: `user_message`,
+    which dispatch() sets to "<action> <target>" and the engine stores verbatim. The
+    start time is required as well, so a re-dispatch of the same target cannot match
+    the previous run.
+
+    Returns "" if it cannot be resolved, which the caller treats exactly as it treats
+    a missing id today -- a lock freed by age rather than by evidence. Degrading is
+    fine; guessing is not.
+    """
+    want = f"{action} {target}"
+    for attempt in range(attempts):
+        try:
+            if payload_override is not None:
+                # A caller supplying a payload is asserting about THAT payload; it must
+                # not reach the engine. Same rule as release_settled_locks' probe.
+                payload = payload_override
+                runs = payload.get("runs", []) if isinstance(payload, dict) else payload
+                best, best_ts = "", 0.0
+                for r in runs if isinstance(runs, list) else []:
+                    if not isinstance(r, dict) or str(r.get("user_message")) != want:
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(
+                            str(r.get("started_at") or "").replace("Z", "+00:00")).timestamp()
+                    except ValueError:
+                        continue
+                    if ts >= since_epoch - 120 and ts > best_ts:
+                        best, best_ts = str(r.get("id") or ""), ts
+                return best
+            out = subprocess.run(
+                [config.ARCHON_BIN, "workflow", "runs", "--json"],
+                cwd=str(config.ROOT), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=120,
+            )
+            if out.returncode == 0:
+                raw = out.stdout or ""
+                offsets = [i for i in (raw.find("{"), raw.find("[")) if i >= 0]
+                if offsets:
+                    payload = json.loads(raw[min(offsets):])
+                    runs = payload.get("runs", []) if isinstance(payload, dict) else payload
+                    best, best_ts = "", 0.0
+                    for r in runs if isinstance(runs, list) else []:
+                        if not isinstance(r, dict) or str(r.get("user_message")) != want:
+                            continue
+                        started = str(r.get("started_at") or "")
+                        try:
+                            ts = datetime.fromisoformat(
+                                started.replace("Z", "+00:00")).timestamp()
+                        except ValueError:
+                            continue
+                        # 120s of slack: the row is written a moment after we launched.
+                        if ts >= since_epoch - 120 and ts > best_ts:
+                            best, best_ts = str(r.get("id") or ""), ts
+                    if best:
+                        return best
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+            pass
+        # The row is written asynchronously by the detached child, so a miss on the
+        # first look is expected rather than a failure.
+        if attempt < attempts - 1:
+            time.sleep(3)
+    return ""
 
 
 def run_status(run_id: str) -> str | None:

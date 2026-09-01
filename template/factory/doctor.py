@@ -344,6 +344,27 @@ def main(argv: list[str]) -> int:
         )
     else:
         r.add(OK, "checkout is current", f"level with origin/{config.BASE_BRANCH}")
+        
+        # SLACK IS NO LONGER A BRAKE, so it has to be a REPORT. merge.py closes the gap
+        # on every merge; a gap that survives means a raise did not land (most often a
+        # push that failed), and nothing else would say so now that the gate does not
+        # hold on it. Silent slack is exactly what the ratchet was built to prevent.
+        try:
+            _floor = json.loads((config.SHARED / '.factory/locks/floor.json')
+                               .read_text(encoding='utf-8'))
+            _stale = [k for k, v in _floor.items()
+                      if isinstance(v, int) and not k.startswith('_') and not k.endswith('_MAX')]
+            r.add(OK, 'ratchet floors', f'{len(_stale)} tracked, closed automatically on merge')
+            _ceiling = _floor.get('UNCALIBRATED_MAX')
+            if _ceiling is None:
+                r.add(WARN, 'uncalibrated ceiling',
+                      'UNCALIBRATED_MAX absent, so a change that introduces a threshold '
+                      'nobody set would merge unremarked', 1)
+            else:
+                r.add(OK, 'uncalibrated ceiling',
+                      f'{_ceiling} margins may go uncalibrated; a change that adds one holds')
+        except Exception as _e:  # noqa: BLE001
+            r.add(WARN, 'ratchet floors', f'could not be read: {_e}')
 
     # --- holds waiting on a person -------------------------------------------
     # A hold is neither a failure nor an escalation, so nothing else in this audit

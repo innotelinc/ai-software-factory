@@ -15,7 +15,10 @@ regression here is reported before the dial is trusted rather than after.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+from datetime import datetime, timezone
 import tempfile
 from pathlib import Path
 
@@ -33,6 +36,7 @@ import state  # noqa: E402
 
 FAILURES: list[str] = []
 CHECKS = 0
+NL = chr(10)
 
 
 def check(what: str, ok: bool, detail: str = "") -> None:
@@ -695,6 +699,165 @@ def size_cap_checks() -> None:
           "without it, moving code under tests/ removes the cap entirely")
 
 
+def run_resolution_checks() -> None:
+    """The run id must come from the ENGINE, matched on a key the factory controls.
+
+    `archon workflow run --detach` prints a "Run id" that appears nowhere in the run
+    record: across four consecutive dispatches the timestamps and workflow names
+    matched and the id overlap was zero. Keying on it meant lock liveness could never
+    be answered, no run ever read back as `completed`, and no cost was ever available
+    -- three symptoms, each patched separately, all one bug.
+    """
+    now = 1_756_000_000.0
+    iso = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    older = datetime.fromtimestamp(now - 4000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    payload = {"runs": [
+        {"id": "right", "user_message": "validate gh:pr:15", "started_at": iso},
+        {"id": "stale", "user_message": "validate gh:pr:15", "started_at": older},
+        {"id": "other", "user_message": "validate gh:pr:14", "started_at": iso},
+    ]}
+    check("the run is found by the message the factory sent",
+          dispatch.resolve_run_id("validate", "gh:pr:15", now, payload_override=payload) == "right")
+    check("a PREVIOUS run of the same target is not matched",
+          dispatch.resolve_run_id("validate", "gh:pr:15", now, payload_override=payload) != "stale",
+          "a re-dispatch would otherwise adopt the run it just replaced")
+    check("a different target is not matched",
+          dispatch.resolve_run_id("validate", "gh:pr:99", now, payload_override=payload) == "")
+    check("an empty engine answer resolves to nothing, not to a guess",
+          dispatch.resolve_run_id("validate", "gh:pr:15", now,
+                                  payload_override={"runs": []}) == "")
+
+
+def ratchet_raise_checks() -> None:
+    """The auto-raise may only ever move a floor UP, and only for keys it already has.
+
+    This is the one place the machinery writes the protected floor file, so the
+    property that makes it safe has to be asserted rather than argued. A pull request
+    touching floor.json is still auto-rejected by the guard; this path runs after the
+    merge, in the machinery, and can only tighten. "The floor never falls without a
+    human" IS the ratchet, and these checks are what keep that true.
+    """
+    import json as _json
+    import merge as _merge
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / ".factory" / "locks").mkdir(parents=True)
+        floor = root / ".factory" / "locks" / "floor.json"
+        before = {"_note": "prose", "UNIT_CHECKS": 64, "VITEST_PASSED": 21,
+                  "MUTATIONS_CAUGHT": 14, "UNCALIBRATED_MAX": 7}
+        floor.write_text(_json.dumps(before), encoding="utf-8")
+
+        calls: list[tuple] = []
+        original_git, original_env = _merge.git, os.environ.get("FACTORY_OBSERVED_COUNTS")
+        _merge.git = lambda *a: (calls.append(a), (0, ""))[1]  # type: ignore[assignment]
+        try:
+            # observed: one higher, one LOWER, one absent, plus a key not in the floor
+            os.environ["FACTORY_OBSERVED_COUNTS"] = _json.dumps(
+                {"UNIT_CHECKS": 70, "VITEST_PASSED": 9, "NEW_KEY": 999,
+                 "UNCALIBRATED_MAX": 99})
+            _merge.raise_floor(str(root))
+            after = _json.loads(floor.read_text(encoding="utf-8"))
+
+            check("a higher observed count RAISES the floor", after["UNIT_CHECKS"] == 70)
+            check("a LOWER observed count leaves the floor alone",
+                  after["VITEST_PASSED"] == 21,
+                  "the floor fell without a human, which is the ratchet gone")
+            check("a key the run did not report is untouched",
+                  after["MUTATIONS_CAUGHT"] == 14)
+            check("a key not already in the floor is NOT added",
+                  "NEW_KEY" not in after,
+                  "the factory would be choosing what it is measured on")
+            check("prose keys survive", after.get("_note") == "prose")
+            check("a _MAX CEILING is never raised", after.get("UNCALIBRATED_MAX") == 7,
+                  "raising a ceiling loosens the check; this path may only tighten")
+            check("the raise is committed and pushed",
+                  any("commit" in c for c in calls) and any("push" in c for c in calls))
+
+            # nothing to raise -> nothing written, nothing committed
+            calls.clear()
+            os.environ["FACTORY_OBSERVED_COUNTS"] = _json.dumps({"UNIT_CHECKS": 70})
+            check("no raise means no commit", _merge.raise_floor(str(root)) == ""
+                  and not any("commit" in c for c in calls))
+
+            # a missing/garbled hand-off must be a no-op, never a rewrite
+            calls.clear()
+            os.environ["FACTORY_OBSERVED_COUNTS"] = "not json"
+            check("an unreadable hand-off changes nothing",
+                  _merge.raise_floor(str(root)) == ""
+                  and _json.loads(floor.read_text(encoding="utf-8"))["UNIT_CHECKS"] == 70)
+        finally:
+            _merge.git = original_git  # type: ignore[assignment]
+            if original_env is None:
+                os.environ.pop("FACTORY_OBSERVED_COUNTS", None)
+            else:
+                os.environ["FACTORY_OBSERVED_COUNTS"] = original_env
+
+
+def uncalibrated_ceiling_checks() -> None:
+    """The uncalibrated hold must fire on a RISE, and stay silent at the ceiling.
+
+    It fired on neither before: the gate looked for `NAME_UNCALIBRATED=<n>` while the
+    harness prints `FAILED=0 UNCALIBRATED=5`, so the regex matched nothing on every run
+    since it was written. Simply repairing the regex would have been worse than leaving
+    it dead -- seven margins are uncalibrated on main BY DESIGN, so "any exist" would
+    have refused every auto-merge forever.
+    """
+    import gate as _gate
+    real_log = ("BALANCE_CLAIMS=10 FAILED=0 UNCALIBRATED=5\n"
+                "LEGIBILITY_CHECKS=20 FAILED=0 UNCALIBRATED=2\n")
+    total = _gate.uncalibrated_total(real_log)
+    check("the marker the harness ACTUALLY prints is counted", total == 7,
+          f"counted {total}; the old pattern required an underscore and matched nothing")
+    check("a log with no uncalibrated margins counts zero",
+          _gate.uncalibrated_total("BALANCE_CLAIMS=10 FAILED=0" + chr(10)) == 0)
+    # THE CEILING'S VALUE IS REPO STATE, NOT A MACHINERY INVARIANT, so it is checked by
+    # `doctor` instead. Reading an installed factory's floor.json from here made this
+    # file unrunnable in the template, where no such file exists -- and a self-test that
+    # cannot run in the product it ships with is a self-test nobody runs.
+
+
+def assumption_count_checks() -> None:
+    """An assumption is a KEY, not a line, and the hold message must say which."""
+    import gate as _gate
+    sample = NL.join([
+        "# ASSUMPTIONS - issue 3",  # a comment, not an assumption
+        "",
+        "EFFECTIVE=1.9  | WHY: derived with RESISTED below, not chosen on its own.",
+        "                 The mean multiplier a hero sees over a wave is unchanged,",
+        "                 which is the whole reason the pair moves together.",
+        "                 CHANGE IF: the balance run shows the margin inside noise.",
+        "",
+        "RESISTED=0.35  | WHY: the other half of the pair above.",
+        "                 CHANGE IF: an off-element loadout feels unplayable.",
+    ])
+    keys = _gate.assumption_keys(sample)
+    check("two assumptions are counted as two, not as nine lines",
+          keys == ["EFFECTIVE", "RESISTED"],
+          f"got {keys}; counting lines reported 7-8 assumptions as 69-80 on every PR,"
+          f" which made a reviewable hold look like an unreviewable wall")
+    check("an indented continuation is not an assumption",
+          "CHANGE" not in keys and "The" not in keys)
+    check("a comment line is not an assumption", not any(k.startswith("#") for k in keys))
+    check("an empty file yields no assumptions", _gate.assumption_keys("") == [])
+
+    # THE CALL SITE, NOT JUST THE FUNCTION. The checks above prove assumption_keys is
+    # correct; they say nothing about whether the gate USES it. A mutation that put
+    # line-counting back into the hold message passed all of them, because the hold
+    # message is built inline in main() where a unit check cannot reach it. Source
+    # inspection is how the rest of this machinery pins its call sites too.
+    gate_src = (Path(__file__).parent / "gate.py").read_text(encoding="utf-8")
+    check("the hold message counts assumptions via assumption_keys",
+          "keys = assumption_keys(assumptions)" in gate_src,
+          "the gate is counting something else; line-counting reported 8 as 80")
+    check("the hold message does not count raw lines",
+          "assumptions.splitlines() if" not in gate_src,
+          "that expression IS the bug: it counts WHY paragraphs as assumptions")
+    check("the uncalibrated hold compares against the ceiling",
+          "uncal_max is not None and uncal_total > uncal_max" in gate_src,
+          "holding whenever any margin is uncalibrated is a permanent off switch, "
+          "because seven of them are uncalibrated on main by design")
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     # POINT THE LEDGER SOMEWHERE HARMLESS FOR THE WHOLE RUN, before any check fires.
@@ -716,6 +879,10 @@ def main() -> int:
     watchdog_checks()
     ledger_isolation_checks()
     size_cap_checks()
+    run_resolution_checks()
+    assumption_count_checks()
+    uncalibrated_ceiling_checks()
+    ratchet_raise_checks()
 
     if FAILURES:
         if not quiet:

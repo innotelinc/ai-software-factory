@@ -35,6 +35,7 @@ in code you control. Branch protection is a good second lock and a bad only lock
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -91,6 +92,89 @@ def worktree_holding(branch: str) -> str:
         elif line.strip() == f"branch refs/heads/{branch}":
             return path
     return ""
+
+
+def raise_floor(holder: str) -> str:
+    """Close the ratchet slack this merge just created. MONOTONIC: it never lowers.
+
+    WHY THIS IS SAFE, and why it is not a hole in the protected list. The guard still
+    rejects any PULL REQUEST that touches `.factory/locks/floor.json`, so a builder
+    still cannot delete an assertion and lower the floor to match -- which is the
+    attack the protection exists to stop. This runs afterwards, in the machinery, and
+    can only move a number UP. "The floor never falls without a human" is the ratchet,
+    and it is exactly preserved.
+
+    WHY IT HAS TO BE AUTOMATIC. Slack is the gap between what the harness asserts and
+    what the floor requires, and it is precisely the number of assertions that could
+    be deleted with the gate still green. The gate held every merge until a human
+    closed it. That is the right instinct and the wrong remedy: it made the SUCCESS
+    case -- a PR that adds tests -- require a human, so on a good day the factory
+    stopped completely. Four pull requests in one session were each held on slack
+    alone, and closing them by hand took four separate commits.
+
+    Raising it here closes the gap in the same breath as the merge that opened it,
+    which is both faster than a human and strictly more honest: the floor now
+    describes what main actually has, at the moment main comes to have it.
+
+    THE COUNTS COME FROM THE GATE RUN ON THE MERGED CONTENT. The merge is a squash of
+    a branch that was required to be fast-forwardable, so the tree that landed is the
+    tree that was measured. Raising to numbers measured somewhere else is how main
+    ends up claiming coverage it does not have, which happened by hand earlier and
+    turned main red on its own gate.
+    """
+    raw = os.environ.get("FACTORY_OBSERVED_COUNTS", "")
+    if not raw:
+        return ""
+    try:
+        obs = {k: int(v) for k, v in json.loads(raw).items()}
+    except (json.JSONDecodeError, ValueError, AttributeError, TypeError):
+        return ""
+
+    floor_path = Path(holder) / ".factory" / "locks" / "floor.json"
+    if not floor_path.exists():
+        return ""
+    try:
+        data = json.loads(floor_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+    raised = []
+    for key, value in data.items():
+        # `_MAX` keys are CEILINGS, not floors: UNCALIBRATED_MAX says how many margins
+        # nobody has set may exist, and raising that would loosen the check rather than
+        # tighten it. This path may only ever tighten, so it does not touch them. They
+        # come down as margins get calibrated, in a human commit.
+        if key.startswith("_") or key.endswith("_MAX") or not isinstance(value, int):
+            continue
+        got = obs.get(key)
+        # NEVER invent a key, and NEVER move one down. Both would be the factory
+        # editing its own judge rather than tightening it.
+        if got is None or got <= value:
+            continue
+        data[key] = got
+        raised.append(f"{key} {value}->{got}")
+    if not raised:
+        return ""
+
+    floor_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    msg = ("ratchet: close the slack this merge opened\n\n"
+           + "\n".join("  " + r for r in raised)
+           + "\n\nRaised automatically by factory/merge.py, from the counts the gate\n"
+             "observed on the tree that just landed. Monotonic: this path can only\n"
+             "raise. Lowering a floor is still a human commit, and a pull request that\n"
+             "touches this file is still auto-rejected, so the ratchet is unchanged.\n")
+    rc, _ = git("-C", holder, "add", ".factory/locks/floor.json")
+    if rc != 0:
+        return ""
+    rc, out = git("-C", holder, "commit", "-m", msg)
+    if rc != 0:
+        print(f"RATCHET_RAISE_FAILED could not commit: {out.strip()[:200]}")
+        return ""
+    rc, out = git("-C", holder, "push", "origin", config.BASE_BRANCH)
+    if rc != 0:
+        print(f"RATCHET_RAISE_UNPUSHED committed locally but push failed: {out.strip()[:200]}")
+        return ", ".join(raised)
+    return ", ".join(raised)
 
 
 def main(argv: list[str]) -> int:
@@ -303,6 +387,19 @@ def main(argv: list[str]) -> int:
 
     print(f"MERGED branch={branch} -> main")
     print(f"MERGED_SHA={sha}")
+
+    # Bookkeeping, and deliberately inside the section that cannot fail the merge:
+    # a floor that did not get raised is slack, which the next gate reports. A merge
+    # wrongly reported as failed invites someone to re-run work that already shipped.
+    if holder:
+        try:
+            raised = raise_floor(holder)
+            if raised:
+                print(f"RATCHET_RAISED {raised}")
+        except Exception as e:  # noqa: BLE001
+            print(f"RATCHET_RAISE_FAILED {type(e).__name__}: {e}")
+    else:
+        print("RATCHET_RAISE_SKIPPED - no checkout holds the base branch")
 
     if failures:
         print("MERGE_BOOKKEEPING_FAILED: " + " ".join(failures))

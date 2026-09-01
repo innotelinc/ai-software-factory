@@ -21,6 +21,7 @@ Exit codes:
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -150,6 +151,35 @@ def observed_counts(log: str, floor_keys: "list[str] | None" = None) -> dict[str
             continue
         out[key] = counted(log, key)
     return out
+
+
+def uncalibrated_total(log: str) -> int:
+    """How many margins this run reported as having no threshold anybody set.
+
+    A FUNCTION rather than an inline regex so the self-test can call the real thing.
+    The first version of that test carried its own copy of the pattern, which meant
+    breaking the pattern here would not have failed it -- a check that cannot see the
+    code it is checking, which is exactly how the dead `_UNCALIBRATED` regex survived
+    unnoticed in the first place.
+    """
+    return sum(int(n) for n in re.findall(r"UNCALIBRATED=(\d+)", log))
+
+
+def assumption_keys(text: str) -> list[str]:
+    """The KEYS in an assumptions file, in order.
+
+    The format is `KEY=value` at the start of a line, followed by an indented WHY
+    paragraph that may run for many lines. Anything indented belongs to the key above
+    it, so only unindented `NAME=` lines are assumptions.
+    """
+    keys: list[str] = []
+    for line in text.splitlines():
+        if not line or line[0].isspace() or line.lstrip().startswith("#"):
+            continue
+        m = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+        if m:
+            keys.append(m.group(1))
+    return keys
 
 
 def main(argv: list[str]) -> int:
@@ -311,16 +341,33 @@ def main(argv: list[str]) -> int:
 
     # Some claims are ORDINAL and need no number. Others are MARGIN claims and need
     # a threshold somebody chose. A factory that invents that number to turn a gate
-    # green is authoring taste in a config file, and it is the most tempting
-    # shortcut there is, because the number is right there in the output and one of
-    # them would make the red go away. Any check that has a threshold nobody set
-    # emits `<NAME>_UNCALIBRATED=<n>`. That does not fail the gate -- it refuses the
-    # AUTO-merge and says so.
-    uncal = {m.group(1): int(m.group(2)) for m in re.finditer(r"([A-Z][A-Z0-9_]*)_UNCALIBRATED=(\d+)", log)}
-    if uncal:
+    # green is authoring taste in a config file, and it is the most tempting shortcut
+    # there is, because the number is right there in the output and one of them would
+    # make the red go away.
+    # THIS CHECK HAD NEVER FIRED. It looked for `NAME_UNCALIBRATED=<n>`; the harness
+    # emits `BALANCE_CLAIMS=10 FAILED=0 UNCALIBRATED=5` -- a space, not an underscore
+    # -- so the regex matched nothing on every run since it was written. A safety gate
+    # that has never once triggered is the "dead check" failure the ratchet exists to
+    # catch, wearing the gate's own clothes.
+    #
+    # AND FIXING THE REGEX ALONE WOULD HAVE BEEN WORSE. Seven margins are uncalibrated
+    # on main today and they are uncalibrated BY DESIGN -- MISSION open question 1 says
+    # every one is Cole's to set from a build he has played. Holding on "any exist"
+    # would refuse every auto-merge forever: not a signal, a global off switch, and the
+    # autonomy dial would read 3 while behaving like 0.
+    #
+    # So it is a CEILING, and the mirror of the ratchet below it. The floor says check
+    # counts may not FALL without a human; this says the number of margins nobody has
+    # set may not RISE without one. Both let the good direction through on its own and
+    # stop the bad one. What it now catches is the thing actually worth catching: a PR
+    # that INTRODUCES a threshold nobody chose.
+    uncal_total = uncalibrated_total(log)
+    uncal_max = floor.get("UNCALIBRATED_MAX")
+    if uncal_max is not None and uncal_total > uncal_max:
         automerge = False
         held_why.append(
-            "uncalibrated thresholds (" + ", ".join(f"{k}:{v}" for k, v in uncal.items()) + ")"
+            f"uncalibrated margins rose to {uncal_total}, ceiling is {uncal_max} "
+            f"(this change adds a threshold nobody has set)"
         )
 
     # An ASSUMPTION holds the merge, it does not stop the work. The plan node is
@@ -348,7 +395,21 @@ def main(argv: list[str]) -> int:
             break
     if assumptions:
         automerge = False
-        held_why.append(f"{len([ln for ln in assumptions.splitlines() if ln.strip()])} recorded assumption(s)")
+        # COUNT ASSUMPTIONS, NOT LINES, and name them.
+        #
+        # This counted non-blank lines, and the format is one KEY=value followed by an
+        # indented WHY paragraph. So seven assumptions were reported as sixty-nine and
+        # eight as eighty, on every single pull request. The number is the first thing
+        # a person reads on a hold, and "80 recorded assumptions" reads as a wall
+        # nobody can review while "8" reads as an afternoon. The hold was not too
+        # strict; it was describing itself as ten times larger than it was, and a
+        # review that looks impossible gets rubber-stamped, which is worse than no
+        # hold at all because it manufactures assurance.
+        keys = assumption_keys(assumptions)
+        held_why.append(
+            f"{len(keys)} recorded assumption(s)"
+            + (": " + ", ".join(keys[:8]) + ("..." if len(keys) > 8 else "") if keys else "")
+        )
 
     # --- 4. the verdict -------------------------------------------------------
     if not verdict_path.exists() or not verdict_path.stat().st_size:
@@ -477,9 +538,14 @@ def main(argv: list[str]) -> int:
         mut = f", mutations {caught}/{total}" if total is not None else ""
         print(f"GATE_PASS pr={target} markers green, e2e steps={steps}{mut}")
 
+        # HAND THE COUNTS TO THE MERGE, so it can close the slack it is about to
+        # create. They are the numbers observed on the tree that is about to land --
+        # measured here, not re-derived there, because a floor raised from counts
+        # taken somewhere else is how main comes to claim coverage it does not have.
         merged = subprocess.run(
             [sys.executable, str(Path(__file__).parent / "merge.py"), target],
             cwd=str(config.ROOT),
+            env={**os.environ, "FACTORY_OBSERVED_COUNTS": json.dumps(obs)},
         )
         if merged.returncode != 0:
             return fail(target, "merge failed -- leaving the PR for a human")

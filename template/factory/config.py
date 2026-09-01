@@ -219,7 +219,21 @@ FLOOR_FILE = ROOT / _env("FACTORY_FLOOR_FILE", ".factory/locks/floor.json")
 # harness improves, because raising the floor is a protected edit the factory
 # cannot make. Printing it as a note and carrying on is how the hole widens
 # forever, so here it pins autonomy instead: any slack caps the run at level 2.
-SLACK_CAPS_AUTONOMY = _env("FACTORY_SLACK_CAPS_AUTONOMY", "true").lower() == "true"
+# SLACK NO LONGER CAPS AUTONOMY, because merge.py now CLOSES the slack instead.
+#
+# It cannot both hold the merge and be closed by the merge: the gate decides
+# `automerge` before merge.py runs, and at that moment the floor has not been raised
+# yet, so slack is always present on any PR that adds a check. Leaving this true after
+# adding the auto-raise would deadlock every such PR forever -- held on a gap that only
+# the merge it is blocking could close.
+#
+# The risk it was guarding is real and is now handled by mechanism rather than by
+# stopping: slack is exactly how many assertions could be deleted with the gate still
+# green, and it used to GROW because only a human could close it. It cannot grow now,
+# because every merge closes it. If a raise ever fails (a push that did not land), the
+# gap survives, the gate still PRINTS `RATCHET_SLACK=` on every run, and `doctor`
+# reports it -- so it is visible without being a brake.
+SLACK_CAPS_AUTONOMY = _env("FACTORY_SLACK_CAPS_AUTONOMY", "false").lower() == "true"
 
 # --- the dial -----------------------------------------------------------------
 # 0  workflows exist, run by hand            <- where every factory starts
