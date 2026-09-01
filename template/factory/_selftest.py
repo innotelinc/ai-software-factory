@@ -234,9 +234,9 @@ def marker_checks() -> None:
         return set((out.stdout or "").split())
 
     low, high = markers_at(2), markers_at(3)
-    for m in ("PROTECTED_OK", "APP_STARTED", "E2E_PASSED", "GATE_OK"):
+    for m in ("PROTECTED_OK", config.MARKER_APP_RAN, config.MARKER_E2E, "GATE_OK"):
         check("marker " + m + " is required at every level", m in low)
-    for m in ("HOLDOUT_PASSED", "MUTATIONS_OK"):
+    for m in config.MARKERS_LEVEL3:
         check("marker " + m + " becomes required at level 3", m in high,
               "an unreviewed merge could pass without it having run")
     check("the level-3 set is a superset of the level-2 set", low <= high,
