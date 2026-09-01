@@ -100,13 +100,54 @@ branch = subprocess.run(
     cwd=str(config.ROOT), capture_output=True, text=True, encoding="utf-8", timeout=30,
 ).stdout.strip()
 
-base = "origin/main"
-subprocess.run(["git", "fetch", "--quiet", "origin", "main"], cwd=str(config.ROOT), timeout=180)
+base = f"origin/{config.BASE_BRANCH}"
+subprocess.run(["git", "fetch", "--quiet", "origin", config.BASE_BRANCH], cwd=str(config.ROOT), timeout=180)
 if subprocess.run(
     ["git", "rev-parse", "--verify", "--quiet", base],
     cwd=str(config.ROOT), capture_output=True, timeout=30,
 ).returncode != 0:
-    base = "main"
+    base = config.BASE_BRANCH
+
+# --- 3b. DOES THIS BRANCH ALREADY CARRY A PREVIOUS ATTEMPT? ---------------------
+#
+# A lap that fails after committing leaves its branch behind, and the next lap for the
+# same issue is dispatched onto that same branch name. The worktree then opens with the
+# previous attempt's files already present -- and an implement node that looks around,
+# sees the feature it was asked to build sitting there, and checks `HEAD` will conclude
+# the work is already done and merged.
+#
+# That happened: a lap reported COMPLETE having changed nothing, citing a commit that
+# existed only on its own unmerged branch. The base had no such file. Nothing failed;
+# the issue simply never got built and the report was confident and wrong.
+#
+# So the fact is measured and handed to the node rather than left to be inferred from
+# a directory listing.
+prior = subprocess.run(
+    ["git", "log", "--oneline", f"{base}..HEAD"],
+    cwd=str(config.ROOT), capture_output=True, text=True, encoding="utf-8", timeout=30,
+).stdout.strip()
+prior_note = ""
+if prior:
+    n = len(prior.splitlines())
+    prior_note = (
+        f"THIS BRANCH ALREADY HAS {n} COMMIT(S) THAT ARE NOT ON {base}. They are a "
+        f"PREVIOUS ATTEMPT at this same issue that did not land -- most likely it was "
+        f"blocked by the guard or the gate. They are NOT merged and the issue is NOT "
+        f"done. Continue that work: read it, keep what is right, fix what stopped it. "
+        f"Do not report the issue as already complete on the strength of files you "
+        f"find in this worktree.\n" + prior
+    )
+    note(prior_note)
+    # WRITTEN WHERE THE PLANNER WILL READ IT. `note()` goes to the run log, which the
+    # plan node never sees; a warning nobody reads is not a warning. The plan prompt
+    # names this file.
+    (artifacts / "PRIOR-ATTEMPT.md").write_text(
+        "# A previous attempt is already on this branch
+
+" + prior_note + "
+",
+        encoding="utf-8",
+    )
 
 # --- 4. claim it ---------------------------------------------------------------
 if issue["_state"] != "in-progress":
@@ -120,5 +161,6 @@ emit(
             "branch": branch,
             "title": re.sub(r"\s+", " ", title)[:120],
             "base": base,
+            "prior_attempt": prior_note,
         }
 )

@@ -18,6 +18,21 @@ will ever go fully unattended.
 **No code is written in this phase.** The goal is a plan context-rich enough that the
 implement node succeeds on the first attempt without going looking for anything.
 
+## Before anything: is there a previous attempt on this branch?
+
+`$preflight.output.prior_attempt` is non-empty when this branch already carries commits
+that are not on the base. That means a previous lap on this same issue committed work
+and then failed -- usually blocked by the guard or the gate.
+
+**Those commits are not merged and the issue is not done.** The worktree will look as
+though the feature exists, because it does exist, on a branch nobody took. A lap that
+checked and concluded "already implemented at HEAD" reported COMPLETE having changed
+nothing, and the base had no such file.
+
+So: read what is there, keep what is right, and work out what stopped it. That is
+usually a small fix rather than a rewrite, and re-doing it from scratch throws away
+work that was mostly correct.
+
 ## Inputs
 
 - `$ARTIFACTS_DIR/issue.md` — the issue, as filed. **This is the ticket.**
