@@ -168,6 +168,39 @@ VALIDATE_QUICK = _env("FACTORY_VALIDATE_QUICK", "python harness/ci.py --quick")
 E2E_FILE = ROOT / _env("FACTORY_E2E_FILE", "harness/e2e.py")
 HOLDOUT_FILE = ROOT / _env("FACTORY_HOLDOUT_FILE", ".factory/holdout/run.py")
 
+# NO CONSOLE WINDOWS, and this is not cosmetic.
+#
+# Every helper this factory shells out to -- gh, archon, git, npm -- is an .exe or a
+# .cmd, and on Windows each one allocates its own console window. A dispatcher on a
+# ninety-second timer makes a dozen of those per tick, so an unattended factory becomes
+# windows flashing over whatever its owner is trying to do, all day and all night.
+#
+# The entire promise of this thing is that it runs while nobody is watching. A factory
+# that interrupts you every ninety seconds is a factory you switch off, which makes this
+# a correctness problem about the product rather than a nicety.
+#
+# PATCHED HERE, ONCE, because every factory script imports this module and none of them
+# should have to remember. CREATE_NO_WINDOW only, deliberately NOT DETACHED_PROCESS: a
+# detached child stops dying with its parent, and a dispatch that outlives the tick that
+# started it is a lock nobody releases.
+NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
+if NO_WINDOW:
+    _subprocess_run = subprocess.run
+    _subprocess_popen = subprocess.Popen
+
+    def _quiet_run(*a, **kw):  # type: ignore[no-untyped-def]
+        kw.setdefault("creationflags", NO_WINDOW)
+        return _subprocess_run(*a, **kw)
+
+    class _QuietPopen(_subprocess_popen):  # type: ignore[misc,valid-type]
+        def __init__(self, *a, **kw):  # type: ignore[no-untyped-def]
+            kw.setdefault("creationflags", NO_WINDOW)
+            super().__init__(*a, **kw)
+
+    subprocess.run = _quiet_run  # type: ignore[assignment]
+    subprocess.Popen = _QuietPopen  # type: ignore[assignment]
+
 MARKER_APP_RAN = _env("FACTORY_MARKER_APP_RAN", "APP_STARTED")
 MARKER_E2E = _env("FACTORY_MARKER_E2E", "E2E_PASSED")
 # The markers that become mandatory at level 3, when nobody reads the diff.
