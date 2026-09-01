@@ -150,6 +150,21 @@ VALIDATE_QUICK = _env("FACTORY_VALIDATE_QUICK", "python harness/ci.py --quick")
 #
 # APP_STARTED and E2E_PASSED are not negotiable: they are the two gates that must
 # be code in every factory. Add one marker per check family you build.
+# WHICH MARKER MEANS WHAT, named in config rather than hardcoded in the checks.
+#
+# The doctor and the self-test used to require the literal strings `APP_STARTED` and
+# `E2E_PASSED`, which are this TEMPLATE's vocabulary, not a universal one. A repo whose
+# harness emits `PLAYTHROUGH_PASSED` was told its markers were "not negotiable" and
+# refused a dial it had fully earned -- the product hardcoding its own example, exactly
+# like assuming the default branch is called main.
+#
+# What is genuinely not negotiable is that SOMETHING proves the application ran and
+# SOMETHING proves an end-to-end journey was asserted. The names are the repo's.
+MARKER_APP_RAN = _env("FACTORY_MARKER_APP_RAN", "APP_STARTED")
+MARKER_E2E = _env("FACTORY_MARKER_E2E", "E2E_PASSED")
+# The markers that become mandatory at level 3, when nobody reads the diff.
+MARKERS_LEVEL3 = _env("FACTORY_MARKERS_LEVEL3", "HOLDOUT_PASSED MUTATIONS_OK").split()
+
 REQUIRED_MARKERS = _env(
     "FACTORY_REQUIRED_MARKERS", "PROTECTED_OK APP_STARTED E2E_PASSED GATE_OK"
 ).split()
@@ -197,7 +212,7 @@ AUTONOMY = _env_int("FACTORY_AUTONOMY", 0)
 # "empty is not pass" failure the marker list exists to prevent, aimed at the one
 # check that justifies the whole arrangement.
 if AUTONOMY >= 3:
-    for _m in ("HOLDOUT_PASSED", "MUTATIONS_OK"):
+    for _m in MARKERS_LEVEL3:
         if _m not in REQUIRED_MARKERS:
             REQUIRED_MARKERS.append(_m)
 
