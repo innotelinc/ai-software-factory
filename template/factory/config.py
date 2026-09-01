@@ -286,7 +286,19 @@ STOP_LABEL = _env("FACTORY_STOP_LABEL", "factory:stop")
 # Crude, and it works. An unsupervised agent will otherwise ship a 3,000-line PR
 # nobody can review, and "nobody can review it" is where a factory stops being
 # auditable even in principle.
+# THE SIZE CAP COUNTS PRODUCTION LINES, NOT TESTS.
+#
+# It exists so nothing ships that a person could not review even in principle. Tests
+# are not that risk -- they are the evidence the rest of the diff is safe -- and
+# counting them against the cap taxes the one thing this whole system is built to
+# encourage. PR #14 was rejected at 515 lines of which 404 were tests: 141 lines of
+# production code, blocked for being well tested. The rule was punishing the behaviour
+# it exists to protect.
+#
+# TOTAL_CAP is the backstop, so "put it in tests/" is not a way around the cap. A diff
+# over the total is unreviewable no matter what it is made of.
 SIZE_CAP = _env_int("FACTORY_SIZE_CAP", 500)
+TOTAL_CAP = _env_int("FACTORY_TOTAL_CAP", 1500)
 
 # THE SCOPE LEASH, and it is a FILE count rather than a line count on purpose. The
 # failure it catches is not size: a refactor node with no scope grows a six-file PR

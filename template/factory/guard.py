@@ -87,6 +87,13 @@ BANNED_CATEGORIES: list[str] = [
 
 SIZE_EXEMPT = [".factory/runs/*", ".factory/runs/**", "*.lock", "uv.lock", "bun.lockb"]
 
+# Counted separately from production code by the size cap. See config.SIZE_CAP.
+# These patterns are about WHERE tests live, not what they contain: a file under
+# tests/ does not ship to the running product, so it cannot carry the risk the cap is
+# guarding against, and TOTAL_CAP still bounds the whole diff.
+TEST_PATHS = ["tests/*", "tests/**", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js",
+              "**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+
 
 def git(*args: str) -> tuple[int, str]:
     p = subprocess.run(
@@ -200,14 +207,18 @@ def main(argv: list[str]) -> int:
 
     rc, stat = git("diff", "--numstat", rng)
     lines = 0
+    code_lines = 0
     if rc == 0:
         for row in stat.splitlines():
             parts = row.split("\t")
             if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
                 if not matches(parts[2], SIZE_EXEMPT):
-                    lines += int(parts[0]) + int(parts[1])
+                    n = int(parts[0]) + int(parts[1])
+                    lines += n
+                    if not matches(parts[2], TEST_PATHS):
+                        code_lines += n
 
-    print(f"GUARD_START range={rng} files={len(changed)} lines={lines}")
+    print(f"GUARD_START range={rng} files={len(changed)} lines={lines} code_lines={code_lines}")
 
     violations: list[tuple[str, str]] = []
     for f in changed:
@@ -242,11 +253,21 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    if lines > config.SIZE_CAP:
+    if code_lines > config.SIZE_CAP:
         print(
-            f"SIZE_VIOLATION: {lines} lines changed, cap is {config.SIZE_CAP} "
-            "(FACTORY_RULES 8). Split the work into a sub-issue rather than shipping "
-            "something nobody could review even in principle."
+            f"SIZE_VIOLATION: {code_lines} production lines changed, cap is "
+            f"{config.SIZE_CAP} (FACTORY_RULES 8). Tests are excluded and are not the "
+            f"problem; this is {code_lines} lines of code. Split the work into a "
+            "sub-issue rather than shipping something nobody could review even in "
+            "principle."
+        )
+        return 1
+
+    if config.TOTAL_CAP and lines > config.TOTAL_CAP:
+        print(
+            f"SIZE_VIOLATION: {lines} total lines changed, cap is {config.TOTAL_CAP}. "
+            "Tests are exempt from the production-line cap, not from review: a diff "
+            "this large is unreviewable whatever it is made of."
         )
         return 1
 

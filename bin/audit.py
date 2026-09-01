@@ -469,6 +469,40 @@ def runs_selftest(doctor_src: str) -> bool:
     return False
 
 
+def check_watchdog_wired(root: Path) -> None:
+    """The watchdog must exist, must be CALLED by the tick, and must be able to HALT.
+
+    Three separate claims, because on this project each has failed on its own:
+
+     1. It exists. Easy, and the least useful of the three.
+     2. The dispatcher actually calls it. A safety net that ships in a file nobody
+        imports is the "dead tests" failure again -- 203 lines of persistence tests
+        passed by hand for weeks while the gate never executed one of them.
+     3. Its halt path writes the STOP file. `escalate()` wrote its label correctly 68
+        times while the machine drove straight through it, so "the guard fired" and
+        "the machine stopped" have to be checked as different things.
+    """
+    wd = root / "factory" / "watchdog.py"
+    disp = root / "factory" / "dispatch.py"
+    if not wd.exists():
+        fail("watchdog", "factory/watchdog.py is missing; a runaway has nothing to stop it")
+        return
+    body = code_only(disp.read_text(encoding="utf-8")) if disp.exists() else ""
+    if "watchdog.assess" not in body:
+        fail("watchdog wired", "dispatch.py never calls watchdog.assess, so the tick is "
+                               "unwatched no matter what watchdog.py contains")
+        return
+    if "watchdog.halt" not in body:
+        fail("watchdog halts", "dispatch.py calls assess() but never halt(); a finding "
+                               "that only prints is the escalation that was already ignored")
+        return
+    wbody = code_only(wd.read_text(encoding="utf-8"))
+    if "STOP_FILE" not in wbody:
+        fail("watchdog halts", "watchdog.halt does not touch config.STOP_FILE, so nothing "
+                               "it decides can actually stop the next tick")
+        return
+
+
 def check_selftest_wired(root: Path) -> None:
     """The machinery self-test must exist, and the doctor must run it.
 
@@ -668,6 +702,7 @@ def main(argv: list[str]) -> int:
     check_holdout_isolation(root)
     check_deny_lists(root)
     check_selftest_wired(root)
+    check_watchdog_wired(root)
     check_lock_liveness(root)
     check_workflow_state_writes(root)
     check_trigger_parity(root)

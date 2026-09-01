@@ -139,6 +139,66 @@ That asks whether the thing deciding it does.
 
 ---
 
+## The watchdog: what stops a loop nobody is watching
+
+Every gate above judges ONE thing: this PR, this run, this diff. A tick is stateless
+by design, and that has a consequence which is invisible until it bites.
+
+**A process with no memory of its own actions cannot notice it is repeating itself.**
+
+The per-target lock prevents two dispatches at the same time. Nothing prevented the
+same dispatch happening 68 times in sequence, which is what happened on 2026-09-01:
+one rejected pull request re-validated every tick for three and a half hours, $17.18,
+while the rest of the queue was never reached. Every individual tick was correct. The
+pathology existed only in the sequence, and the sequence was the one thing nothing
+wrote down.
+
+So the factory keeps a diary and reads it:
+
+- **`factory/ledger.py`** — an append-only line per dispatch, settle, escalation and
+  halt. Deliberately dumb: it records, it does not judge.
+- **`factory/watchdog.py`** — runs at the top of every tick, second only to the stop
+  button, and **halts** rather than warns. Warning is what the escalation already was,
+  and the machine drove straight through it.
+
+Seven detectors, each aimed at a different shape of stuck:
+
+| detector | fires when |
+|---|---|
+| `repeat-dispatch` | one action+target 3x with no run completing, or 6x regardless |
+| `escalation-ignored` | a target is dispatched *after* being escalated to a human |
+| `all-failing` | 5 settled runs, none completed |
+| `no-progress` | 8 dispatches, none completed — a loop spread across targets |
+| `spend-cap` | more than $25 in the window |
+| `spend-without-progress` | money buying no completions |
+| `spend-blind` | WARN only: most settled runs carry no cost, so the two above are half-blind |
+
+`escalation-ignored` is the incident's root cause expressed as a **behaviour** rather
+than as a table, so it survives any future bug that produces the same effect by
+another route.
+
+**`assess()` is a pure function** of a list of events and a clock. It reads nothing and
+asks no service anything, which is what makes every detector provable:
+`factory/_test_watchdog.py` hands it synthetic histories and asserts each one fires,
+asserts a *busy, healthy* hour produces no findings at all, and replays the real
+incident from the run log. On that replay the watchdog halts at dispatch **#3**: $16.45
+of the $17.20 never spent.
+
+Both halves are then checked by things that can fail:
+
+- the detector proofs run inside `factory/_selftest.py`, so `doctor` cannot report
+  healthy machinery while the component that stops a runaway is broken;
+- `bin/audit.py` asserts the watchdog exists, that `dispatch.py` actually **calls** it,
+  and that its halt path writes the stop file — three separate claims, because "the
+  guard fired" and "the machine stopped" are different things and this project has
+  been burned by exactly that gap.
+
+**Set the thresholds high.** A false halt costs a night of throughput and is obvious in
+the morning; a missed runaway costs money continuously and looks like a working
+factory. `FACTORY_WATCH_*` tunes every threshold.
+
+---
+
 ## What holds a merge without stopping the work
 
 The factory decides ordinary product values rather than stopping for them — a price,

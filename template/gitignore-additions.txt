@@ -12,6 +12,7 @@ __pycache__/
 
 # darkfactory: runtime state, never committed
 .factory/runs/
+.factory/ledger.jsonl
 .factory/locks-runtime/
 .factory/findings/
 .factory/needs-human.md

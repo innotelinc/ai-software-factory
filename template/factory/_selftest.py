@@ -87,6 +87,48 @@ def lock_checks(tmp: Path) -> None:
         check("a list that does not mention this run keeps the lock", lk.exists(),
               "absence from a windowed list is not evidence the run ended")
 
+        # THE PER-RUN FALLBACK. The bulk list reports a WINDOW of 20 runs, so on a busy
+        # day a live lock's run ages out of it within the hour. Asking about that id
+        # directly is the only honest way to tell "the list did not mention it" from
+        # "the engine says it is gone", and conflating them ran the factory at zero
+        # capacity for three hours over a run that had already finished.
+        missing = {"runs": [{"id": "99999999-0000-0000-0000-000000000000", "status": "completed"}]}
+
+        dispatch.release_settled_locks(payload_override=missing, status_probe=lambda _r: None)
+        check("an UNREACHABLE engine keeps the lock", lk.exists(),
+              "silence must still be silence; this is the half that must not regress")
+
+        dispatch.release_settled_locks(payload_override=missing, status_probe=lambda _r: "running")
+        check("a probe reporting RUNNING keeps the lock", lk.exists())
+
+        dispatch.release_settled_locks(payload_override=missing, status_probe=lambda _r: "wat")
+        check("a probe reporting an UNRECOGNISED status keeps the lock", lk.exists(),
+              "unknown must mean still running, never settled")
+
+        # A YOUNG lock is not probed at all. `not_found` seconds after a dispatch is
+        # the engine not having persisted the row yet, and acting on it released the
+        # lock out from under a LIVE validation, which the reconcile sweep then
+        # escalated to needs-human. That happened for real, minutes after the probe
+        # was added: the cure for a three-hour wedge became a three-second one that
+        # killed work which was going fine.
+        dispatch.release_settled_locks(payload_override=missing,
+                                       status_probe=lambda _r: "not_found")
+        check("a YOUNG lock is not released on not_found", lk.exists(),
+              "a just-dispatched run is not yet queryable; this is a race, not a verdict")
+
+        import time as _t
+        old_enough = _t.time() - (dispatch.PROBE_GRACE_MINUTES + 1) * 60
+        import os as _os
+        _os.utime(lk, (old_enough, old_enough))
+        dispatch.release_settled_locks(payload_override=missing,
+                                       status_probe=lambda _r: "not_found")
+        check("an AGED lock reporting NOT_FOUND is released", not lk.exists(),
+              "being told the run does not exist is an answer, not silence")
+        # Re-take it for the checks that follow. `os` is imported further down in
+        # this function, so the pid is written as 0: a lock naming a run is freed
+        # by evidence about that run, never by its pid.
+        lk.write_text(f"0 now\nrun {run_id}\n", encoding="utf-8")
+
         dispatch.release_settled_locks(payload_override={"runs": [
             {"id": run_id, "status": "running"}]})
         check("a RUNNING run keeps the lock", lk.exists())
@@ -205,6 +247,49 @@ def state_checks() -> None:
           "missing: " + " ".join(sorted(
               s for s in state.TRANSITIONS
               if s not in labelless and s not in state.LABEL_FOR_STATE)))
+
+
+    # THE READ MUST AGREE WITH THE WRITE. Every check above this one interrogates
+    # TRANSITIONS, which is the table a person reads when they want to know what the
+    # states are. None of them ever asked whether a state written as a label can be
+    # READ BACK as itself, and that gap cost 68 dispatches of one rejected pull
+    # request: `factory:needs-human` on a PR was skipped by the kind filter in
+    # `_state_from_labels` and fell through to `open`, so the dispatcher put the one
+    # state that means STOP back at the front of its queue, indefinitely.
+    #
+    # THE FIRST VERSION OF THIS CHECK WENT VACUOUS RATHER THAN RED. It asked which
+    # kinds a state was declared for and round-tripped those, so when needs-human was
+    # missing from PR_STATES the pr case was simply not generated: 118 checks passing
+    # instead of 119 failing. A check that disappears in exactly the situation it
+    # exists to catch is worse than no check, and it is the same "empty is not pass"
+    # failure the gate has a ratchet for. So the invariant is now STATED, not derived
+    # from the list it is auditing.
+    check("needs-human is declared for BOTH kinds",
+          "needs-human" in state.ISSUE_STATES and "needs-human" in state.PR_STATES,
+          "escalate() parks either kind here, so a kind that does not declare it "
+          "cannot read its own escalation back")
+
+    # Anything a PR-only state can transition to is, by definition, a PR state.
+    # `rejected` is deliberately excluded as a SOURCE: it is shared with issues, and
+    # walking out of it drags the issue half of the table in.
+    pr_sources = {"open", "validating", "passed", "failed", "merged", "held"}
+    for src in pr_sources:
+        for dst in state.TRANSITIONS.get(src, set()):
+            check("PR state " + dst + " is declared in PR_STATES",
+                  dst in state.PR_STATES or dst in {"open"},
+                  "reachable from " + src + " but a PR carrying its label reads back as "
+                  + state._state_from_labels("pr", [state.LABEL_FOR_STATE.get(dst, "")], False))
+
+    for st, label in state.LABEL_FOR_STATE.items():
+        if not label:
+            continue
+        for kind, declared in (("issue", state.ISSUE_STATES), ("pr", state.PR_STATES)):
+            if st not in declared:
+                continue
+            check("state " + st + " round-trips for a " + kind,
+                  state._state_from_labels(kind, [label], False) == st,
+                  "written as " + label + " but reads back as "
+                  + state._state_from_labels(kind, [label], False))
 
 
 # --- the dial and the checks it makes load-bearing ----------------------------
@@ -536,8 +621,87 @@ def refmove_checks() -> None:
           "reported " + repr(here) + ", so update-ref would never run and refs go stale")
 
 
+def watchdog_checks() -> None:
+    """Run the watchdog's own detector proofs as machinery invariants.
+
+    They live in `_test_watchdog.py` because they need synthetic histories and a
+    frozen clock, and they are re-run FROM HERE so `doctor` cannot report healthy
+    machinery while the one component that stops a runaway is broken. The proofs are
+    not duplicated: `check` is swapped for this module's, so each one counts as an
+    invariant here rather than being collapsed into a single pass/fail.
+    """
+    try:
+        import _test_watchdog as wt
+    except Exception as e:  # noqa: BLE001
+        check("watchdog proofs are importable", False, str(e))
+        return
+    original = wt.check
+    wt.check = check  # type: ignore[assignment]
+    try:
+        wt.detector_proofs()
+    finally:
+        wt.check = original  # type: ignore[assignment]
+
+
+def ledger_isolation_checks() -> None:
+    """The self-test must never write the REAL ledger, and this pins it.
+
+    `lock_checks` drives `release_settled_locks()` with a synthetic Archon payload, and
+    that function records a settle. Bound to the production path, every `doctor` run
+    appended FABRICATED settles (run 11111111-2222-3333-4444-555555555555, alternating
+    completed/failed) to the evidence the watchdog judges. Well-formed, plausible, and
+    entirely invented -- which is worse than a corrupt line, because nothing looks
+    wrong until a detector halts a healthy factory on it.
+
+    Fake evidence in a safety system is the one failure mode that turns the safety
+    system into the hazard, so it gets an invariant rather than a fix and a hope.
+    """
+    import ledger as _led
+    real = config.SHARED / ".factory/ledger.jsonl"
+    before = real.read_text(encoding="utf-8") if real.exists() else None
+    check("the self-test redirects the ledger away from the real one",
+          _led.LEDGER != real,
+          f"still pointing at {_led.LEDGER}; a doctor run would fabricate history")
+    _led.record(_led.SETTLE, run="selftest-probe", status="completed")
+    after = real.read_text(encoding="utf-8") if real.exists() else None
+    check("a recorded event did NOT reach the real ledger", before == after,
+          "the production ledger grew during a test run")
+    check("the redirected ledger DID receive it",
+          any(e.get("run") == "selftest-probe" for e in _led.read()),
+          "the write went nowhere, so this check proves nothing")
+
+
+def size_cap_checks() -> None:
+    """The size cap must count production code and exempt tests, with a total backstop.
+
+    Both halves are load-bearing and each fails differently. Without the test exemption
+    the cap punishes the behaviour the whole system exists to encourage -- PR #14 was
+    rejected at 515 lines of which 404 were tests. Without the total backstop the
+    exemption becomes a loophole: move anything into `tests/` and the cap is gone.
+    """
+    import guard
+    check("a tests/ path is recognised as a test", guard.matches("tests/weapons.test.ts",
+                                                                 guard.TEST_PATHS))
+    check("a co-located .test.ts is recognised", guard.matches("src/sim/world.test.ts",
+                                                               guard.TEST_PATHS))
+    check("production source is NOT treated as a test",
+          not guard.matches("src/sim/world.ts", guard.TEST_PATHS),
+          "the exemption would swallow the code the cap exists to bound")
+    check("the harness is NOT treated as a test",
+          not guard.matches("harness/ci.ts", guard.TEST_PATHS),
+          "harness/ is protected and must never become exempt scope")
+    check("a total backstop exists and exceeds the production cap",
+          bool(config.TOTAL_CAP) and config.TOTAL_CAP > config.SIZE_CAP,
+          "without it, moving code under tests/ removes the cap entirely")
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
+    # POINT THE LEDGER SOMEWHERE HARMLESS FOR THE WHOLE RUN, before any check fires.
+    # `lock_checks` records settles as a side effect of proving the lock logic.
+    import ledger as _led
+    _led.LEDGER = Path(tempfile.gettempdir()) / "factory-selftest-ledger.jsonl"
+    _led.LEDGER.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory() as td:
         lock_checks(Path(td))
     gate_checks()
@@ -549,6 +713,9 @@ def main() -> int:
     deploy_checks()
     duplication_checks()
     refmove_checks()
+    watchdog_checks()
+    ledger_isolation_checks()
+    size_cap_checks()
 
     if FAILURES:
         if not quiet:

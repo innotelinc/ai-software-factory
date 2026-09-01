@@ -660,3 +660,76 @@ notifications.** The stop list worked perfectly and nobody was told.
 **The rule.** Every route into `needs-human` notifies. There are more of them than you
 think: the runner, the gate, the fix cap, the dispatcher's stall sweep, and triage
 itself.
+
+## The escalation that fed the queue it was supposed to leave
+
+**Symptom.** An unattended loop dispatched `darkfactory-validate` at one pull request
+**68 times in three and a half hours**, every tick, each run failing in the same way.
+Nothing else in the queue was ever reached.
+
+**What was actually right.** The guard was correct: the PR changed 515 lines against a
+500-line cap, so it was rejected on its merits. The gate set the PR to `rejected`,
+commented, escalated the issue, and notified. All of that worked.
+
+**The bug.** `PR_STATES` did not contain `needs-human`. `_state_from_labels` skips any
+state that is an ISSUE state but not a PR state, so a pull request carrying
+`factory:needs-human` fell through the entire table and returned the default: `open`.
+`next_action` selects the oldest `open` PR as "awaiting the independent validator".
+
+So escalation wrote the label, and the very next read handed the same PR back to the
+dispatcher as fresh work. **The one state that means STOP was the one state that could
+not be read back**, and the machine could not see the brake it was pressing.
+
+`TRANSITIONS` had listed `needs-human` as a legal PR destination from the start. Two
+tables disagreed, and every test only ever consulted the one that was right.
+
+**Why nothing caught it.** Ten self-test invariants interrogate `TRANSITIONS`. Not one
+asked whether a state written as a label reads back as itself. Writing and reading were
+each tested against the table; they were never tested against **each other**.
+
+**The fix.** `needs-human` and `held` added to `PR_STATES`, plus a round-trip invariant:
+every state, written as its own label, must read back as itself for every kind that
+declares it, and every destination reachable from a PR-only state must be declared in
+`PR_STATES`.
+
+**The second lesson, which is the sharper one.** The first version of that new check
+**went vacuous instead of red**. It asked which kinds a state was declared for and
+round-tripped those, so when `needs-human` was missing from `PR_STATES` the PR case was
+simply never generated: 118 checks passing rather than 119 failing. A check that
+evaporates in exactly the condition it exists to detect is worse than no check, because
+it reports success. This is "empty is not pass" reappearing one level up, inside the
+harness, and it is why the invariant is now STATED rather than derived from the list it
+is auditing. Every new check must be run against the broken code before it is trusted.
+
+
+## The safety system that fabricated its own evidence
+
+**Found within an hour of shipping the watchdog, by the watchdog's own monitor.**
+
+`factory/_selftest.py` proves the lock logic by driving `release_settled_locks()` with a
+synthetic Archon payload. That function had just been instrumented to record a settle to
+the ledger, and `ledger.LEDGER` was bound at import to the production path.
+
+So **every `doctor` run appended invented history to the evidence the watchdog judges**:
+run id `11111111-2222-3333-4444-555555555555`, alternating `completed`/`failed`, eleven
+entries deep before it was noticed.
+
+**Why it is worse than it sounds.** Fake evidence in a safety system turns the safety
+system into the hazard. Those settles carried no cost, which is what surfaced it (the
+`spend-blind` warning fired), but a slightly different fixture would have tripped
+`all-failing` and halted a perfectly healthy factory. Nothing would have looked wrong:
+the entries were well-formed, plausible, and written by the factory's own code.
+
+**How it was caught.** Not by a test. The operator-side monitor reported a standing
+`spend-blind` warning, and the ledger tail showed a run id no real dispatch could have.
+The second layer earned itself on its first hour.
+
+**The fix.** The ledger path resolves per call and is env-overridable; the self-test
+redirects it to a temp file for the whole run; and three new invariants pin it: the
+redirect must be in place, a recorded event must NOT reach the real ledger, and it MUST
+reach the redirected one. That third one matters -- without it the check passes when the
+write silently goes nowhere, which is the vacuous-check failure again.
+
+**The general rule.** Instrumenting a function makes every existing caller of that
+function a writer, tests included. When you add a side effect to shared machinery, the
+question is not "is this correct" but "who else calls this, and do they mean it".

@@ -82,11 +82,18 @@ repository owner is exempt. One issue is triaged per dispatch.
 
 **Every PR must:**
 
-- change at most **500 lines** and touch at most **12 files**. Over either cap, stop
-  and split the work. Something nobody could review even in principle is not
-  shippable here — and the file cap catches what the line cap cannot: a six-file
-  change that grows to eleven with five one-line "while I was in here" edits, well
-  under the line cap the whole way.
+- change at most **500 lines of production code** and touch at most **12 files**, and
+  stay under **1500 lines total**. Over any cap, stop and split the work. Something
+  nobody could review even in principle is not shippable here — and the file cap
+  catches what the line cap cannot: a six-file change that grows to eleven with five
+  one-line "while I was in here" edits, well under the line cap the whole way.
+
+  **Tests do not count toward the 500.** They are the evidence the rest of the diff is
+  safe, not the risk the cap exists to bound, and a cap that counts them taxes the one
+  behaviour this whole system is built to encourage. PR #14 was rejected at 515 lines
+  of which 404 were tests — 141 lines of production code, blocked for being well
+  tested. The 1500 total is the backstop, so "put it in `tests/`" is not a way around
+  the cap; tests are exempt from the production count, never from review.
 - link its issue with `Fixes #N` / `Closes #N` / `Resolves #N`. The validator
   extracts this to find what the diff was supposed to solve; a PR without it cannot
   be validated at all.

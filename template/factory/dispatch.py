@@ -32,12 +32,18 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402
+# Bound to `eventlog` rather than `ledger`: this module already defines a function
+# called `ledger()` (the needs-human.md writer), and shadowing it would silently turn
+# every escalation record into a call on the wrong object.
+import ledger as eventlog  # noqa: E402
 import notify  # noqa: E402
 import state  # noqa: E402
+import watchdog  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -100,6 +106,8 @@ def escalate(target: str, why: str) -> set[str]:
                 parked.add(issue)
     except Exception:  # noqa: BLE001
         pass
+    for t in parked:
+        eventlog.record(eventlog.ESCALATE, target=t, reason=why[:300])
     log(notify.send(target, why))
     return parked
 
@@ -110,7 +118,9 @@ RUN_ID_RE = re.compile(
 # A run in any of these is over. Anything else -- INCLUDING a status this version of
 # the engine has never been seen to emit -- counts as still running, because the
 # cost of guessing wrong in that direction is only a delay.
-SETTLED_STATUSES = {"completed", "failed", "cancelled", "canceled", "abandoned",
+# `not_found` is here deliberately: see run_status(). The engine saying it has no
+# such run is a settled outcome, not an unknown one.
+SETTLED_STATUSES = {"not_found", "completed", "failed", "cancelled", "canceled", "abandoned",
                     "error", "errored", "timeout", "timed_out", "stopped"}
 
 
@@ -326,8 +336,110 @@ def dispatch(action: str, target: str) -> bool:
             fh.write("run " + run_id + "\n")
     else:
         log(f"  ! no run id found in {logfile.name}; this lock can only be freed by age")
+    eventlog.record(eventlog.DISPATCH, action=action, target=target,
+                    workflow=workflow, run=run_id or None)
     log(f"DISPATCHED {workflow} {target} (detached; lock {lock.name} held until the run settles)")
     return True
+
+
+def _grace_minutes() -> float:
+    try:
+        return float(os.environ.get("FACTORY_PROBE_GRACE_MINUTES", "") or 5.0)
+    except ValueError:
+        return 5.0
+
+
+PROBE_GRACE_MINUTES = _grace_minutes()
+
+
+def lock_age_minutes(lock: Path) -> float:
+    try:
+        return (time.time() - lock.stat().st_mtime) / 60
+    except OSError:
+        return 0.0
+
+
+def run_status(run_id: str) -> str | None:
+    """Ask the engine about ONE run. None when it genuinely cannot be answered.
+
+    `archon workflow runs --json` reports a WINDOW (20 runs). A lock whose run has
+    aged out of it is not "unknown" in any deep sense -- the engine still knows, it
+    just was not asked. Before this, such a lock sat until the 180-minute stale cap
+    and the factory ran at zero capacity the whole time, reporting "at capacity,
+    nothing dispatched" once a minute. On a busy day that window fills in under an
+    hour, so the wedge is the normal case rather than an edge one.
+
+    Only ever called as a FALLBACK, for ids the bulk list did not mention, so it costs
+    one extra query per stuck lock rather than one per lock per tick.
+    """
+    if not run_id:
+        return None
+    try:
+        out = subprocess.run(
+            [config.ARCHON_BIN, "workflow", "get", run_id, "--json"],
+            cwd=str(config.ROOT), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=120,
+        )
+        # NOT gated on returncode: `not_found` exits 1 while still printing a
+        # perfectly good JSON answer, and returning early on the exit code threw that
+        # answer away and re-created the wedge this function exists to remove.
+        raw = out.stdout or ""
+        offsets = [i for i in (raw.find("{"), raw.find("[")) if i >= 0]
+        if not offsets:
+            return None
+        payload = json.loads(raw[min(offsets):])
+        status = payload.get("status")
+        if status:
+            return str(status).lower()
+        # "NOT FOUND" IS AN ANSWER, and it has to be told apart from silence.
+        #
+        # The engine replying `{"ok": false, "error": "not_found"}` is it stating that
+        # no such run exists -- a run that was never persisted, or has been pruned.
+        # Nothing will ever hold that lock, so keeping it until the 180-minute stale
+        # cap runs the factory at zero capacity for three hours over a run that is not
+        # merely finished but was never there.
+        #
+        # This does NOT weaken the "empty is not an answer" rule the rest of this file
+        # is built on. An unreachable engine, a timeout, or an unparseable reply all
+        # still return None and still keep the lock. The difference is between being
+        # told nothing and being told no.
+        if payload.get("error") == "not_found" or payload.get("ok") is False:
+            return "not_found"
+        return None
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def run_cost(run_id: str) -> float | None:
+    """What one settled run cost, or None if it cannot be read.
+
+    Called ONLY on settle, which happens a few times an hour, because the bulk
+    `workflow runs --json` payload carries no cost and the per-run query takes a
+    couple of seconds. Doing this per tick would make the dispatcher slower than the
+    work it dispatches.
+
+    None rather than 0.0 on failure. Zero is a claim ("this was free") and would
+    quietly deflate the spend detector to the point where it never fires.
+    """
+    if not run_id:
+        return None
+    try:
+        out = subprocess.run(
+            [config.ARCHON_BIN, "workflow", "get", run_id, "--json"],
+            cwd=str(config.ROOT), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=120,
+        )
+        if out.returncode != 0:
+            return None
+        raw = out.stdout or ""
+        offsets = [i for i in (raw.find("{"), raw.find("[")) if i >= 0]
+        if not offsets:
+            return None
+        meta = json.loads(raw[min(offsets):]).get("metadata") or {}
+        cost = meta.get("total_cost_usd")
+        return float(cost) if cost is not None else None
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError, TypeError):
+        return None
 
 
 def lock_run_id(lock: Path) -> str:
@@ -339,7 +451,8 @@ def lock_run_id(lock: Path) -> str:
     return m.group(1) if m else ""
 
 
-def release_settled_locks(payload_override: dict | list | None = None) -> None:
+def release_settled_locks(payload_override: dict | list | None = None,
+                          status_probe: "Callable[[str], str | None] | None" = None) -> None:
     """Release a lock only when the run that took it is PROVABLY finished.
 
     The only question that can be answered honestly here is about a run id. The
@@ -363,6 +476,26 @@ def release_settled_locks(payload_override: dict | list | None = None) -> None:
     locks = [lk for lk in in_flight() if lock_run_id(lk)]
     if not locks:
         return
+    # THE PROBE IS INJECTABLE, and it defaults to OFF for a caller supplying a payload.
+    #
+    # A caller that hands in `payload_override` is asserting something about THAT
+    # payload -- that a windowed list omitting a run is not evidence the run ended, say.
+    # Left wired to the live engine, the fallback answered those tests from production
+    # data and three invariants flipped from proving the rule to proving whatever the
+    # engine happened to say. A test that silently reaches the network is not testing
+    # the thing it names.
+    # A GRACE PERIOD BEFORE THE PROBE IS TRUSTED, and it was paid for immediately.
+    #
+    # `not_found` for a run dispatched SECONDS ago is a race, not a verdict: the engine
+    # has not persisted the row yet. Without this, the very first tick after a dispatch
+    # released the live lock, the reconcile sweep then found the PR in `validating`
+    # with nothing holding it, and escalated a running validation to needs-human. The
+    # fix for a three-hour wedge created a three-second one that was strictly worse,
+    # because it killed work that was going fine.
+    #
+    # Only locks older than the grace are probed. A young lock falls through to the
+    # bulk list exactly as before.
+    probe = status_probe or (run_status if payload_override is None else (lambda _rid: None))
     if payload_override is not None:
         payload = payload_override
     else:
@@ -398,10 +531,18 @@ def release_settled_locks(payload_override: dict | list | None = None) -> None:
     for lock in locks:
         run_id = lock_run_id(lock)
         status = status_by_id.get(run_id)
+        if status is None and lock_age_minutes(lock) >= PROBE_GRACE_MINUTES:
+            # Not in the reported window. Ask about this run SPECIFICALLY before
+            # falling back to the stale cap: "the bulk list did not mention it" and
+            # "the engine cannot tell us" are different answers, and treating the
+            # first as the second wedges capacity to zero for three hours.
+            status = probe(run_id)
         if status is None:
-            continue        # outside the window the engine reported; unknown, so keep
+            continue        # genuinely unanswerable; unknown, so keep
         if status in SETTLED_STATUSES:
             log(f"LOCK_RELEASED {lock.name} - run {run_id[:8]} is {status}")
+            eventlog.record(eventlog.SETTLE, run=run_id, status=status,
+                            target=lock.stem, cost_usd=run_cost(run_id))
             lock.unlink(missing_ok=True)
 
 
@@ -414,6 +555,35 @@ def main() -> int:
         log(f"STOPPED: {why}. Remove it to resume.")
         return 0
     log(f"STOP_CHECK ok ({why})")
+
+    # =========================================================================
+    # 1b. THE WATCHDOG. Second, because it can only be outranked by the stop button.
+    # =========================================================================
+    # A tick is stateless and therefore blind to sequence: it cannot tell its first
+    # dispatch of an item from its sixty-eighth. The watchdog reads the ledger, which
+    # is the only thing in the system that remembers, and HALTS rather than warning.
+    # A warning is what the escalation already was, and the machine drove through it.
+    if not DRY_RUN:
+        try:
+            wd_events = eventlog.read(since_minutes=watchdog.Limits().window_minutes)
+            wd_findings = watchdog.assess(wd_events)
+            halting = [f for f in wd_findings if f.severity == watchdog.HALT]
+            for f in wd_findings:
+                log(f"WATCHDOG {f}")
+            if halting:
+                watchdog.halt(halting)
+                log("WATCHDOG_HALTED - .factory/STOP written, nothing dispatched this tick")
+                return 0
+            # EMPTY IS NOT PASS: report the EVIDENCE examined, not just the verdict.
+            # "no findings" and "the ledger was unreadable so nothing was examined"
+            # are the same sentence otherwise, and the second one is a watchdog that
+            # is quietly switched off.
+            log(f"WATCHDOG_OK events={len(wd_events)} findings=0")
+        except Exception as e:  # noqa: BLE001
+            # A broken watchdog must not take the factory down with it, but it must
+            # not pass silently either: a watchdog that is quietly off is the exact
+            # condition it exists to make impossible.
+            log(f"WATCHDOG_BROKE {type(e).__name__}: {e} - running on, unwatched")
 
     # =========================================================================
     # 2. RECONCILE ON ENTRY. A sweep, not a dispatch, and it runs on EVERY tick.

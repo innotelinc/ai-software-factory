@@ -65,7 +65,23 @@ ISSUE_STATES = [
     "needs-human",
     "done",
 ]
-PR_STATES = ["open", "validating", "passed", "failed", "rejected", "merged"]
+# `needs-human` IS A PR STATE, and leaving it off this list cost 68 dispatches.
+#
+# `_state_from_labels` skips any state that is an ISSUE state but not a PR state, so a
+# pull request carrying `factory:needs-human` fell through the whole table and was read
+# back as `open`. `next_action` selects open PRs as "awaiting the independent
+# validator", so escalating a PR to needs-human -- the one state that is supposed to
+# STOP the machine and hand over to a person -- put it straight back at the front of
+# the queue. The label was written correctly every time; it was the read that lied.
+#
+# TRANSITIONS has always listed needs-human as a legal PR destination, so the two
+# tables disagreed, and only the transitions one was ever consulted by a human.
+#
+# `held` was missing for the same reason and read back correctly only by luck: it is
+# in neither list, so the skip never fired for it. It is a PR-only state (`doctor` is
+# the only reader, via _list("prs", "held")), so it is declared here rather than left
+# to depend on an accident.
+PR_STATES = ["open", "validating", "passed", "failed", "rejected", "merged", "needs-human", "held"]
 
 # The one legality table. Anything not on it is refused.
 TRANSITIONS: dict[str, set[str]] = {
