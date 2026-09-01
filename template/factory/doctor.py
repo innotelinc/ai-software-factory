@@ -150,7 +150,14 @@ def main(argv: list[str]) -> int:
           conventions.name if conventions else "no CLAUDE.md / AGENTS.md")
 
     mission = (root / "MISSION.md").read_text(encoding="utf-8", errors="replace") if has(root / "MISSION.md") else ""
-    out_of_scope = len(re.findall(r"^\s*[-*]\s+\S", mission.split("Out of scope")[-1].split("##")[0], re.M)) if "Out of scope" in mission else 0
+    # NUMBERED LISTS COUNT. This matched only `-` and `*` bullets, and both real
+    # MISSION files written against this scaffold use a NUMBERED list -- which is the
+    # natural choice, because the rest of the document refers to "out-of-scope item 7".
+    # So a mission with seven carefully argued exclusions was reported as "0 entries --
+    # fewer than five is too thin", which is the opposite of true and trains the reader
+    # to ignore the warning.
+    _oos = mission.split("Out of scope")[-1].split("##")[0] if "Out of scope" in mission else ""
+    out_of_scope = len(re.findall(r"^\s*(?:[-*]|\d+[.)])\s+\S", _oos, re.M))
     if out_of_scope >= 5:
         r.add(OK, "out-of-scope list", f"{out_of_scope} entries")
     else:
@@ -192,8 +199,18 @@ def main(argv: list[str]) -> int:
             n = len(spec.get("defects", []))
         except (OSError, ValueError):
             n = 0
-        if contains_scaffold(defects) or n == 0:
-            r.add(FAIL, "mutation set", f"{n} defects -- a gate that has never failed is a gate nobody has tested", 3)
+        # TWO DIFFERENT PROBLEMS, and they had one message between them. A repo with
+        # eight real defects that had merely kept the scaffold's `_scaffold` marker was
+        # told "8 defects -- a gate that has never failed is a gate nobody has tested",
+        # which contradicts itself in one sentence and names neither cause.
+        if n == 0:
+            r.add(FAIL, "mutation set",
+                  "0 defects -- a gate that has never failed is a gate nobody has tested", 3)
+        elif contains_scaffold(defects):
+            r.add(FAIL, "mutation set",
+                  f"{n} defects, but the `_scaffold` marker line is still in defects.json. "
+                  f"Delete it once these are YOUR defects -- it is there so a set nobody "
+                  f"has replaced cannot be mistaken for one somebody wrote", 3)
         elif n < 5:
             r.add(WARN, "mutation set", f"{n} defects -- six or seven is a real set")
         else:
