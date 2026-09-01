@@ -221,13 +221,16 @@ def main(argv: list[str]) -> int:
     ):
         r.add(OK if has(path) else FAIL, name, "" if has(path) else "missing", level)
 
-    if "APP_STARTED" in config.REQUIRED_MARKERS and "E2E_PASSED" in config.REQUIRED_MARKERS:
+    if config.MARKER_APP_RAN in config.REQUIRED_MARKERS and config.MARKER_E2E in config.REQUIRED_MARKERS:
         r.add(OK, "required markers", " ".join(config.REQUIRED_MARKERS))
     else:
         r.add(
             FAIL, "required markers",
-            "APP_STARTED and E2E_PASSED are not negotiable -- they are the two gates "
-            "that must be code in every factory", 2,
+            f"{config.MARKER_APP_RAN} and {config.MARKER_E2E} must both be required -- something "
+            f"has to prove the application RAN and something has to prove an end-to-end journey "
+            f"was asserted. Rename them with FACTORY_MARKER_APP_RAN / FACTORY_MARKER_E2E if your "
+            f"harness calls them something else; do not drop them", 2,
+        )
         )
 
     # --- secrets -------------------------------------------------------------
