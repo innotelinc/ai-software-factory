@@ -161,25 +161,27 @@ def main(argv: list[str]) -> int:
         )
 
     # --- the harness ---------------------------------------------------------
-    e2e = root / "harness" / "e2e.py"
+    e2e = config.E2E_FILE
+    e2eName = e2e.name if not e2e.is_relative_to(root) else str(e2e.relative_to(root)).replace("\\", "/")
     if not has(e2e):
-        r.add(FAIL, "harness/e2e.py", "missing -- there is no end-to-end path", 2)
+        r.add(FAIL, e2eName, "missing -- there is no end-to-end path", 2)
     elif contains_scaffold(e2e):
-        r.add(FAIL, "harness/e2e.py", "still the scaffold's example journey", 2)
+        r.add(FAIL, e2eName, "still the scaffold's example journey", 2)
     else:
-        r.add(OK, "harness/e2e.py", "yours")
+        r.add(OK, e2eName, "yours")
 
-    holdout = root / ".factory" / "holdout" / "run.py"
+    holdout = config.HOLDOUT_FILE
+    holdName = holdout.name if not holdout.is_relative_to(root) else str(holdout.relative_to(root)).replace("\\", "/")
     if not has(holdout):
         r.add(
-            FAIL, "holdout", "no .factory/holdout/run.py -- NOTHING sits above the "
+            FAIL, "holdout", f"no {holdName} -- NOTHING sits above the "
             "independence line, so every check is one the builder could read and "
             "iterate against", 3,
         )
     elif contains_scaffold(holdout):
         r.add(FAIL, "holdout", "still the scaffold's example scenarios", 3)
     else:
-        r.add(OK, "holdout", "yours")
+        r.add(OK, "holdout", f"yours ({holdName})")
 
     defects = root / "harness" / "mutations" / "defects.json"
     if not has(defects):

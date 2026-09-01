@@ -160,6 +160,14 @@ VALIDATE_QUICK = _env("FACTORY_VALIDATE_QUICK", "python harness/ci.py --quick")
 #
 # What is genuinely not negotiable is that SOMETHING proves the application ran and
 # SOMETHING proves an end-to-end journey was asserted. The names are the repo's.
+# WHERE THE TWO IRREPLACEABLE FILES LIVE. The template writes Python at these paths;
+# a repository in another language puts them somewhere else, and the doctor asking for
+# `harness/e2e.py` by name told such a repo it had no end-to-end path while it was
+# staring at one. What must exist is an end-to-end journey and a holdout the builder
+# cannot read -- not two particular filenames.
+E2E_FILE = ROOT / _env("FACTORY_E2E_FILE", "harness/e2e.py")
+HOLDOUT_FILE = ROOT / _env("FACTORY_HOLDOUT_FILE", ".factory/holdout/run.py")
+
 MARKER_APP_RAN = _env("FACTORY_MARKER_APP_RAN", "APP_STARTED")
 MARKER_E2E = _env("FACTORY_MARKER_E2E", "E2E_PASSED")
 # The markers that become mandatory at level 3, when nobody reads the diff.
