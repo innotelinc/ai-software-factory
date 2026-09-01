@@ -36,6 +36,18 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# UTF-8 ON EVERY STREAM, because this module ECHOES OTHER PROGRAMS.
+#
+# Windows defaults stdio to the ANSI codepage, and the first real deploy command tried
+# here -- `vite build` -- ends its output with a U+2713 tick. deploy.py crashed with
+# UnicodeEncodeError on the line that echoes it, AFTER the build had succeeded, so a
+# working deploy was reported as a Python traceback. The modules that only print their
+# own ASCII do not need this; the ones that relay somebody else's output all do.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402
