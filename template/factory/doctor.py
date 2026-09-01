@@ -231,7 +231,6 @@ def main(argv: list[str]) -> int:
             f"was asserted. Rename them with FACTORY_MARKER_APP_RAN / FACTORY_MARKER_E2E if your "
             f"harness calls them something else; do not drop them", 2,
         )
-        )
 
     # --- secrets -------------------------------------------------------------
     unignored = []
