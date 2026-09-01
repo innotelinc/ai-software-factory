@@ -640,7 +640,24 @@ def main() -> int:
     # =========================================================================
     stopped, why = state.stop_requested()
     if stopped:
-        log(f"STOPPED: {why}. Remove it to resume.")
+        # SAY WHICH KIND OF STOPPED, because the remedies are opposites.
+        #
+        # This always said "Remove it to resume", which is right for a stop FILE and
+        # wrong for the first thing a new install hits: no git remote yet, so the
+        # remote stop-state read fails and the tick correctly fails closed. A person
+        # following that instruction goes looking for a file that is not there and
+        # concludes the factory is broken, on their first run, before it has done
+        # anything. Failing closed is correct; telling them to delete a non-existent
+        # file is not.
+        if "could not read" in why:
+            log(f"STOPPED: {why}.")
+            log("  This is failing CLOSED on purpose: an unreadable stop signal must "
+                "count as stopped.")
+            log("  On a fresh install the usual cause is no `origin` remote yet, or "
+                "`gh` not authenticated.")
+            log("  Fix that and the tick resumes on its own; there is no file to delete.")
+        else:
+            log(f"STOPPED: {why}. Remove it to resume.")
         return 0
     log(f"STOP_CHECK ok ({why})")
 
