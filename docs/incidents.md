@@ -733,3 +733,46 @@ write silently goes nowhere, which is the vacuous-check failure again.
 **The general rule.** Instrumenting a function makes every existing caller of that
 function a writer, tests included. When you add a side effect to shared machinery, the
 question is not "is this correct" but "who else calls this, and do they mean it".
+
+
+## The watchdog's first act was to halt a healthy factory
+
+One hour after the runaway watchdog shipped, it fired for real:
+
+    [HALT] all-failing: the last 5 settled runs all ended ['not_found'] with no
+    completion. Nothing is getting through.
+
+Three pull requests had merged during exactly that window. Nothing was wrong.
+
+**The leak.** `not_found` had been added to `SETTLED_STATUSES` an hour earlier to fix
+a different problem: `archon workflow runs --json` reports a window of 20 runs, so a
+finished run ages out of it and its lock could not be released, wedging capacity to
+zero for 180 minutes. Asking the engine about that run directly and treating
+`not_found` as an answer is correct **for the lock question** -- nothing will ever
+hold that lock again.
+
+It is not an answer to the **progress** question. There, `not_found` is silence: the
+run may have succeeded, failed, or never started. The status leaked from a question
+where it means "no" to a question where it means "no idea", and the detector read
+silence as failure.
+
+**Why this is worse than a missed detection.** "Empty is not pass" exists because
+assuming SUCCESS on no evidence hides defects. The mirror costs more: assuming
+FAILURE on no evidence makes the safety system the outage. A watchdog that halts a
+healthy factory is one people switch off, and a switched-off watchdog is worse than
+one that was never built, because everyone believes it is watching.
+
+**The fix.** `UNKNOWN_STATUSES = {"not_found"}`. All four progress detectors now
+require positive evidence -- a settle that reported a real outcome, or a dispatch
+whose run can be asked about. The regression is kept, and beside it the half that
+must not be disarmed: real `failed` runs still trip the detector. Reintroducing the
+exact bug is one of three mutations, all caught.
+
+**What worked.** The halt MECHANISM was correct in every respect: STOP written,
+notification sent, loop stopped, and the operator monitor reported it within seconds.
+Only the detector's reasoning was wrong. That is the right way round for a first
+live failure -- the plumbing is the part that is hard to fix under pressure.
+
+**The generalisation.** A value that answers one question is not thereby an answer to
+a neighbouring one. When a sentinel earns its meaning in a specific decision, check
+every OTHER decision that reads the same field before adding it to a shared set.

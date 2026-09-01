@@ -106,6 +106,23 @@ class Finding:
 # that failed also finished and that conflation is precisely the loop being detected.
 PROGRESS_STATUSES = {"completed"}
 
+# STATUSES THAT ARE NOT EVIDENCE OF ANYTHING, and getting this wrong halted a
+# perfectly healthy factory within an hour of the watchdog going live.
+#
+# `not_found` is recorded when the engine has no record of a run. That is the right
+# answer for RELEASING A LOCK -- nothing will ever hold it again -- and it is not an
+# outcome. Archon reports a window of 20 runs and prunes beyond it, so a busy hour
+# ages runs out routinely, and the settle written when the lock is freed says
+# `not_found` for work that in fact succeeded.
+#
+# D3 counted those as failures and halted with "the last 5 settled runs all ended
+# ['not_found'] with no completion. Nothing is getting through." Three pull requests
+# had merged during exactly that window. Absence of evidence was being read as
+# evidence of failure, which is the same mistake as "empty is not pass" wearing the
+# opposite hat: here the safe-looking default was to ASSUME the worst, and assuming
+# the worst on no evidence makes the safety system the outage.
+UNKNOWN_STATUSES = {"not_found"}
+
 
 def _in_window(events: list[dict], now: datetime, minutes: int) -> list[dict]:
     cutoff = now - timedelta(minutes=minutes)
@@ -135,6 +152,10 @@ def assess(events: list[dict], now: datetime | None = None,
     status_by_run = {str(e.get("run")): str(e.get("status", "")).lower()
                      for e in settles if e.get("run")}
     completed_runs = {r for r, s in status_by_run.items() if s in PROGRESS_STATUSES}
+    unknown_runs = {r for r, s in status_by_run.items() if s in UNKNOWN_STATUSES}
+    # Settles that actually say something about how a run ended.
+    known_settles = [e for e in settles
+                     if str(e.get("status", "")).lower() not in UNKNOWN_STATUSES]
 
     # -- D1 ------------------------------------------------------------------------
     # THE SAME WORK, OVER AND OVER, NEVER ONCE FINISHING. This is the incident's exact
@@ -144,7 +165,11 @@ def assess(events: list[dict], now: datetime | None = None,
         by_pair.setdefault(f"{d.get('action')} {d.get('target')}", []).append(d)
     for pair, ds in sorted(by_pair.items()):
         good = sum(1 for d in ds if str(d.get("run")) in completed_runs)
-        if len(ds) >= lim.repeat_failing and good == 0:
+        # A dispatch whose run we cannot ask about is not a failed dispatch. Requiring
+        # that none of them are unknown keeps this pointed at runs that demonstrably
+        # did not finish, which is what the original incident looked like.
+        blind = sum(1 for d in ds if str(d.get("run")) in unknown_runs)
+        if len(ds) >= lim.repeat_failing and good == 0 and blind == 0:
             findings.append(Finding(
                 "repeat-dispatch", HALT,
                 f"'{pair}' dispatched {len(ds)}x in {lim.window_minutes}m and not one run "
@@ -180,7 +205,8 @@ def assess(events: list[dict], now: datetime | None = None,
     # -- D3 ------------------------------------------------------------------------
     # A RUN OF PURE FAILURE. Not about repetition: five different things all failing
     # says the environment is broken, not that one item is cursed.
-    tail = [str(e.get("status", "")).lower() for e in settles][-lim.consecutive_failures:]
+    tail = [str(e.get("status", "")).lower()
+            for e in known_settles][-lim.consecutive_failures:]
     if len(tail) >= lim.consecutive_failures and not any(s in PROGRESS_STATUSES for s in tail):
         findings.append(Finding(
             "all-failing", HALT,
@@ -190,7 +216,8 @@ def assess(events: list[dict], now: datetime | None = None,
     # -- D4 ------------------------------------------------------------------------
     # BUSY AND GOING NOWHERE. Catches a loop SPREAD ACROSS TARGETS, which D1 cannot
     # see because no single pair repeats enough.
-    if len(dispatches) >= lim.dispatches_without_progress and not completed_runs:
+    if (len(dispatches) >= lim.dispatches_without_progress and not completed_runs
+            and known_settles):
         findings.append(Finding(
             "no-progress", HALT,
             f"{len(dispatches)} dispatches in {lim.window_minutes}m and not one run "
@@ -205,7 +232,7 @@ def assess(events: list[dict], now: datetime | None = None,
             "spend-cap", HALT,
             f"${spend:,.2f} spent in {lim.window_minutes}m, cap is "
             f"${lim.spend_cap_usd:,.2f}."))
-    elif spend >= lim.spend_without_progress_usd and not completed_runs:
+    elif spend >= lim.spend_without_progress_usd and not completed_runs and known_settles:
         findings.append(Finding(
             "spend-without-progress", HALT,
             f"${spend:,.2f} spent in {lim.window_minutes}m with no run completing. "

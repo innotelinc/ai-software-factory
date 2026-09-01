@@ -144,8 +144,14 @@ def detector_proofs() -> None:
 
     # --- D4 no-progress, a loop SPREAD ACROSS targets --------------------------
     # D1 cannot see this one: no single pair repeats enough to trip it.
+    # The settles are REAL failures, not an empty history. Eight dispatches with no
+    # settles at all is not a factory going nowhere, it is a factory nobody has heard
+    # back from yet -- and with a capacity of one it cannot even happen. The first
+    # version of this proof used that shape, so it was asserting on a history the
+    # system cannot produce.
     spread = [ev(ledger.DISPATCH, 60 - i * 5, action="implement",
-                 target=f"gh:issue:{i}", run=f"n{i}") for i in range(8)]
+                 target=f"gh:issue:{i}", run=f"n{i}") for i in range(8)] +              [ev(ledger.SETTLE, 59 - i * 5, run=f"n{i}", status="failed", cost_usd=0.2)
+              for i in range(8)]
     check("D4 fires on 8 dispatches with nothing completing", fired(spread, "no-progress"))
     check("D4 is what catches a loop spread across targets, which D1 misses",
           not fired(spread, "repeat-dispatch"),
@@ -160,6 +166,33 @@ def detector_proofs() -> None:
                   for i in range(9)]
     check("D5 spend-without-progress fires on money buying nothing",
           fired(quiet_burn, "spend-without-progress"))
+
+    # --- the false halt of 2026-09-01, kept as a regression --------------------
+    # The watchdog halted a HEALTHY factory within an hour of going live: five settles
+    # in a row reported `not_found`, D3 read that as "nothing is getting through", and
+    # three pull requests had merged during exactly that window. `not_found` means the
+    # run aged out of the engine's 20-run window, which is the right answer for
+    # releasing a lock and is not an outcome. Absence of evidence read as evidence of
+    # failure, which makes the safety system the outage.
+    aged_out = [ev(ledger.SETTLE, 50 - i * 5, run=f"a{i}", status="not_found")
+                for i in range(6)]
+    check("aged-out runs do NOT trip all-failing", not fired(aged_out, "all-failing"),
+          "not_found says the engine has no record, not that the work failed")
+    check("aged-out runs do NOT trip no-progress",
+          not fired(aged_out + [ev(ledger.DISPATCH, 60 - i * 4, action="validate",
+                                   target=f"gh:pr:{i}", run=f"a{i}") for i in range(8)],
+                    "no-progress"))
+    repeat_blind = [ev(ledger.DISPATCH, 30 - i * 3, action="validate",
+                       target="gh:pr:9", run=f"b{i}") for i in range(3)] +                    [ev(ledger.SETTLE, 29 - i * 3, run=f"b{i}", status="not_found")
+                    for i in range(3)]
+    check("aged-out runs do NOT trip repeat-dispatch",
+          not fired(repeat_blind, "repeat-dispatch"),
+          "three dispatches nobody can report on is not three failures")
+    # and the half that must still work: REAL failures still halt
+    real_fail = [ev(ledger.SETTLE, 50 - i * 5, run=f"c{i}", status="failed")
+                 for i in range(5)]
+    check("real failures still trip all-failing", fired(real_fail, "all-failing"),
+          "the fix for the false positive must not disarm the detector")
 
     # --- D6 spend-blind, the watchdog auditing its own evidence ----------------
     blind = [ev(ledger.SETTLE, 50 - i * 5, run=f"c{i}", status="completed") for i in range(6)]
