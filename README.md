@@ -238,6 +238,29 @@ darkfactory accept gh:pr:11   # agree with a held PR's recorded assumptions
 darkfactory halt          # the stop button
 ```
 
+And the three things `init` installs that actually RUN it, which are yours to start:
+
+```bash
+bash .factory/loop.sh              # the dispatcher loop. One tick a minute, forever.
+python .factory/monitor.py         # the operator watch. Prints only what you would act on.
+```
+
+`.factory/loop.sh` is a **singleton** -- it writes a pid file and refuses to start
+twice, because three copies once raced on one merge and escalated a pull request that
+had in fact merged perfectly. A stale pid file is cleared rather than obeyed.
+
+`.factory/notify.sh` is where escalations go, and `FACTORY_NOTIFY_CMD` points at it by
+default. It writes `.factory/escalations.log` first and unconditionally, then tries
+whichever of these you set, and says out loud when it could not deliver:
+
+```bash
+export FACTORY_NTFY_TOPIC=some-unguessable-name   # https://ntfy.sh, free, phone push
+export FACTORY_WEBHOOK_URL=https://hooks.slack.com/...   # or any {"text": ...} endpoint
+```
+
+**Set one of those before you leave it running.** The watchdog can halt the factory on
+its own; it cannot tell you that it did.
+
 And the three that check the factory rather than your software. Run them after editing
 anything under `factory/`.
 
