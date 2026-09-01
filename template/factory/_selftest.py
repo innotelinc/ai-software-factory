@@ -779,6 +779,40 @@ def ratchet_raise_checks() -> None:
             check("no raise means no commit", _merge.raise_floor(str(root)) == ""
                   and not any("commit" in c for c in calls))
 
+            # THE FILE FALLBACK, which is the branch that shipped broken.
+            #
+            # Everything above exercises the env-var hand-off. The DISPATCHER merge path
+            # has no env var and reads a counts file instead, and that branch contained a
+            # regex whose character class had been mangled by tooling -- so it raised
+            # `unterminated character set` the moment it ran, was swallowed by the
+            # caller's except, and the floor silently never moved on a real merge. One
+            # function, two branches, and only one of them was ever executed by a test.
+            # A SEPARATE SANDBOX, so raising a floor here cannot disturb the
+            # assertions above and below that are about THIS root's floor.
+            calls.clear()
+            os.environ.pop("FACTORY_OBSERVED_COUNTS", None)
+            os.environ["FACTORY_MERGE_TARGET"] = "gh:pr:7"
+            original_findings = config.FINDINGS_DIR
+            with tempfile.TemporaryDirectory() as td2:
+                root2 = Path(td2)
+                (root2 / ".factory" / "locks").mkdir(parents=True)
+                (root2 / ".factory" / "locks" / "floor.json").write_text(
+                    _json.dumps({"UNIT_CHECKS": 64}), encoding="utf-8")
+                try:
+                    config.FINDINGS_DIR = root2 / ".factory" / "findings"
+                    config.FINDINGS_DIR.mkdir(parents=True, exist_ok=True)
+                    (config.FINDINGS_DIR / "gh-pr-7.counts.json").write_text(
+                        _json.dumps({"UNIT_CHECKS": 88}), encoding="utf-8")
+                    raised = _merge.raise_floor(str(root2))
+                    check("the counts FILE is read when no env hand-off exists",
+                          "UNIT_CHECKS" in raised and "88" in raised,
+                          f"returned {raised!r}; without this the dispatcher merge path "
+                          f"raises nothing at all")
+                    check("and the file-fallback path committed", any("commit" in c for c in calls))
+                finally:
+                    config.FINDINGS_DIR = original_findings
+                    os.environ.pop("FACTORY_MERGE_TARGET", None)
+
             # a missing/garbled hand-off must be a no-op, never a rewrite
             calls.clear()
             os.environ["FACTORY_OBSERVED_COUNTS"] = "not json"

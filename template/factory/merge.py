@@ -135,7 +135,16 @@ def raise_floor(holder: str) -> str:
         # both or the feature only exists on the path you happened to test.
         try:
             import re as _re
-            key = _re.sub(r"[/.:\]", "-", os.environ.get("FACTORY_MERGE_TARGET", "")) or None
+            # NO REGEX HERE, deliberately. This must produce the same filename
+            # gate.py wrote, and the pattern it needs contains a backslash inside a
+            # character class -- which has now been mangled twice by the tooling that
+            # edits this file, each time producing `unterminated character set` at
+            # IMPORT of the fallback rather than an obviously wrong filename. A plain
+            # replace cannot be escaped wrongly.
+            key = os.environ.get("FACTORY_MERGE_TARGET", "")
+            for _ch in ("/", ".", ":", chr(92)):
+                key = key.replace(_ch, "-")
+            key = key or None
             if key:
                 cand = config.FINDINGS_DIR / f"{key}.counts.json"
                 if cand.exists():
