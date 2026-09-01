@@ -553,6 +553,37 @@ def check_guard_is_trusted(root: Path) -> None:
              "never fall back to the branch's own copy, which is the original bug")
 
 
+def check_install_ships_a_runner(root: Path) -> None:
+    """`init` must install the things that RUN the factory, not only the machinery.
+
+    Everything else in COPY_PLAN is parts: the state machine, the gate, the guard, the
+    workflow pack, the harness. None of them do anything on their own. The dispatcher
+    loop is what turns them into a factory, the monitor is what tells a person when it
+    stops, and the notifier is what makes an escalation reach somebody.
+
+    All three were missing from the manifest, and it did not look like a bug: `init`
+    reported success, `doctor` passed, and the only symptom was one warning saying
+    "nothing scheduled -- the factory only runs when you run it". The example repo had
+    every part installed and its loop, monitor and notifier written by hand afterwards.
+    That is not an install, it is a parts list.
+    """
+    installer = root.parent / "bin" / "darkfactory.py" if root.name == "template" else None
+    src = installer if installer and installer.exists() else Path(__file__).resolve()
+    body = src.read_text(encoding="utf-8")
+    for name, why in (
+        (".factory/loop.sh", "the dispatcher loop; without it nothing ever ticks"),
+        (".factory/monitor.py", "the operator watch; without it a stopped factory is silent"),
+        (".factory/notify.sh", "the escalation channel; without it needs-human reaches nobody"),
+    ):
+        if f'"{name}"' not in body:
+            fail("install ships a runner", f"COPY_PLAN does not install {name} -- {why}")
+            return
+        if not (root / name).exists():
+            fail("install ships a runner",
+                 f"COPY_PLAN installs {name} but template/{name} does not exist")
+            return
+
+
 def check_selftest_wired(root: Path) -> None:
     """The machinery self-test must exist, and the doctor must run it.
 
@@ -765,6 +796,7 @@ def main(argv: list[str]) -> int:
     check_selftest_wired(root)
     check_watchdog_wired(root)
     check_guard_is_trusted(root)
+    check_install_ships_a_runner(root)
     check_lock_liveness(root)
     check_workflow_state_writes(root)
     check_trigger_parity(root)

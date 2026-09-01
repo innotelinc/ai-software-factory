@@ -402,9 +402,15 @@ TASK_NAME = _env("FACTORY_TASK_NAME", f"darkfactory-{ROOT.name}")
 # --- escalation ---------------------------------------------------------------
 # THE ONLY THING THAT REACHES YOU. Everything else is written to disk and waits.
 #
-# Left empty, a needs-human escalation appends to .factory/needs-human.md and
-# nothing else happens -- which on an unattended system means you find out when you
-# next remember to look. Set it to anything that can reach you.
+# DEFAULTS TO `.factory/notify.sh`, which init installs, because an unset channel
+# means a needs-human escalation appends to .factory/needs-human.md and NOTHING ELSE
+# HAPPENS -- on an unattended system that means you find out when you next remember to
+# look, which is the "file nobody opens" failure sitting inside the escalation path.
+#
+# The shipped script writes that log first and unconditionally, then tries whatever is
+# configured (FACTORY_NTFY_TOPIC, FACTORY_WEBHOOK_URL) and finally a desktop
+# notification, and it says out loud when it could not deliver. Override this to point
+# somewhere else; do not point it back at a file.
 #
 # The message arrives on STDIN; argv[1] is the target, for routing or a subject
 # line only. Every worked example reads stdin. Writing your own and reaching for
@@ -415,7 +421,7 @@ TASK_NAME = _env("FACTORY_TASK_NAME", f"darkfactory-{ROOT.name}")
 #   NOTIFY_CMD = 'tee -a /var/log/factory-escalations.log'
 #
 # Keep it QUIET. If everything notifies you will mute it, and then nothing does.
-NOTIFY_CMD = _env("FACTORY_NOTIFY_CMD", "")
+NOTIFY_CMD = _env("FACTORY_NOTIFY_CMD", "bash .factory/notify.sh")
 
 # --- state --------------------------------------------------------------------
 # `github` wherever an origin remote exists. There is no second backend: two

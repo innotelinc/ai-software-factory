@@ -233,6 +233,15 @@ COPY_PLAN = [
     (".claude/skills", ".claude/skills"),
     (".factory/holdout/run.py", ".factory/holdout/run.py"),
     (".factory/locks/floor.json", ".factory/locks/floor.json"),
+    # THE THINGS THAT ACTUALLY RUN IT. Everything above is machinery; without these
+    # three an install has every part and no engine, and `doctor` says "nothing
+    # scheduled -- the factory only runs when you run it". That is precisely what
+    # happened: the example repository had all of the above installed and its loop,
+    # monitor and notifier had to be written by hand afterwards, which is not an
+    # install, it is a parts list.
+    (".factory/loop.sh", ".factory/loop.sh"),
+    (".factory/monitor.py", ".factory/monitor.py"),
+    (".factory/notify.sh", ".factory/notify.sh"),
 ]
 
 # FACTORY.md is here because the docs keep telling you to write things in it -- the

@@ -21,7 +21,7 @@ LOCK=".factory/loop.pid"
 INTERVAL="${FACTORY_LOOP_INTERVAL:-60}"
 
 # Escalations and watchdog halts must REACH somebody. The default is a log file.
-export FACTORY_NOTIFY_CMD="${FACTORY_NOTIFY_CMD:-bash .factory/notify-slack.sh}"
+export FACTORY_NOTIFY_CMD="${FACTORY_NOTIFY_CMD:-bash .factory/notify.sh}"
 
 mkdir -p .factory/runs
 
