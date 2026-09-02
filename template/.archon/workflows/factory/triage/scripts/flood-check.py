@@ -27,7 +27,11 @@ from nodeio import emit, note  # noqa: E402
 import config  # noqa: E402
 import state  # noqa: E402
 
-DAILY_CAP = int(os.environ.get("FACTORY_ISSUE_CAP_PER_DAY", "3"))
+# THROUGH CONFIG, not os.environ. A workflow node runs under the engine with a
+# declared set of bindings; an undeclared env read here can never be set by anyone,
+# so the cap was permanently 3 whatever the operator configured, and the only symptom
+# was a warning in `archon workflow list`.
+DAILY_CAP = config.ISSUE_CAP_PER_DAY
 target = (os.environ.get("INPUTS_TARGET") or "").strip()
 
 if not target:

@@ -62,13 +62,34 @@ pack, the skills and the governance templates, creates the GitHub labels that ar
 the state machine, and installs [Archon](https://github.com/coleam00/archon) if it
 is not already there. It changes no application code.
 
-**2. Run the setup skill.** `init` installs `.claude/skills/factory-setup/`. Read
-it and follow it. It reads the repo first, then asks four questions, then writes
-`MISSION.md`, `harness/END-TO-END.md` and `.factory/holdout/HOLDOUT.md`.
+**2. Write the three files with them.** This is the actual work, and `init`
+installs a skill for it: read `.claude/skills/factory-setup/SKILL.md` and follow it.
 
-**Do not ask the user anything the repo already answers.** The language, the test
-command, the start command, the routes are all readable. Four questions is the
-budget, and every extra one is a reason to regret starting.
+Read the repo FIRST. The language, the test command, the start command, the entry
+point and the routes are all in there. Then ask at most four questions, each with
+your proposed answer already filled in so the cheapest reply is "yes". Every
+question the repo already answered is a reason to regret starting.
+
+What comes out of it:
+
+| file | what you are writing |
+|---|---|
+| `MISSION.md` | what this product is, and the list of things it must **never** become |
+| `harness/END-TO-END.md` | two to five journeys, in plain English, that a real user takes |
+| `.factory/holdout/HOLDOUT.md` | the same product composed, where the builder cannot read it |
+
+**The out-of-scope list in `MISSION.md` is the one that decides whether any of this
+works.** It is how the factory recognises that a plausible, well-argued, easy
+request is drift rather than a good idea. Do not ask the user to produce it from
+nothing. Propose seven entries yourself from what you read, make them things a
+reasonable person would actually ask for, and have them strike the wrong ones.
+
+Write the holdout yourself and do not ask at all. Then tell them it exists and that
+they should read it, because it is the file the whole auto-merge rests on.
+
+Journeys describe what the product **does today**, never what it should do. A
+journey for behaviour that does not exist yet leaves the gate red before the first
+lap, and nothing can merge, including the change that would make it pass.
 
 **3. Run `python factory/doctor.py` and show what failed.** It will fail. That is
 it working: the doctor is a checklist and its failures are the remaining todo

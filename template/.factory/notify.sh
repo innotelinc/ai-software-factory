@@ -77,11 +77,11 @@ fi
 if [ -z "$delivered" ]; then
   case "$(uname -s 2>/dev/null || echo unknown)" in
     Darwin)
-      if osascript -e "display notification \"$MESSAGE\" with title \"Dark factory\"" >/dev/null 2>&1; then
+      if osascript -e "display notification \"$MESSAGE\" with title \"Software factory\"" >/dev/null 2>&1; then
         delivered="desktop"
       fi ;;
     Linux)
-      if command -v notify-send >/dev/null 2>&1 && notify-send "Dark factory" "$MESSAGE" >/dev/null 2>&1; then
+      if command -v notify-send >/dev/null 2>&1 && notify-send "Software factory" "$MESSAGE" >/dev/null 2>&1; then
         delivered="desktop"
       fi ;;
     *)

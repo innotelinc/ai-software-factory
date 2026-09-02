@@ -114,6 +114,13 @@ WORKFLOW_VALIDATE = _env("FACTORY_WORKFLOW_VALIDATE", "factory-validate")
 WORKFLOW_FIX = _env("FACTORY_WORKFLOW_FIX", "factory-fix")
 WORKFLOW_REGRESS = _env("FACTORY_WORKFLOW_REGRESS", "factory-regress")
 
+# Flood protection, FACTORY_RULES section 1. It lives here rather than in the node
+# script because a node runs under the engine, which does not pass this process's
+# environment through undeclared -- so `os.environ.get` in a workflow script reads a
+# variable nobody can set, silently keeps the default forever, and `archon workflow
+# list` prints a warning about it that nobody connects to a cap that does not apply.
+ISSUE_CAP_PER_DAY = _env_int("FACTORY_ISSUE_CAP_PER_DAY", 3)
+
 # Model tiers, not literal model ids -- Archon resolves a tier against whatever
 # provider is configured, so a factory written with tiers survives a provider swap.
 #
