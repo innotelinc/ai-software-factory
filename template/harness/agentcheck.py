@@ -237,7 +237,61 @@ def run_rung(kind: str, config: dict, app, only: str = "") -> tuple[int, int, li
     except (OSError, json.JSONDecodeError) as e:
         raise AgentCheckFailed(f"the result file is not readable JSON: {e}") from None
 
+    # "I COULD NOT CHECK" IS A DIFFERENT ANSWER FROM "IT IS BROKEN", and the log has
+    # to say which. Measured here: an agent whose shell was locked down could not
+    # issue a single request and reported all 13 assertions failed. Every word of
+    # that was true and the gate said GATE_FAILED: e2e, which reads as a broken
+    # product and sends the next hour to the wrong file.
+    #
+    # THERE IS NO INCENTIVE TO ABUSE THIS. Both branches fail the gate. Only the
+    # NAME changes, and the app is re-probed below so the name is not taken on the
+    # agent's word either.
+    if isinstance(data, dict) and data.get("blocked"):
+        why = str(data.get("blocked_reason") or "").strip() or "no reason given"
+        alive = _still_healthy(config, app)
+        if alive is True:
+            raise AgentCheckFailed(
+                f"the agent reported it could not check anything: {why}. The app "
+                f"ANSWERED a health probe from this process immediately afterwards, so "
+                f"this is the agent's environment, not the product. Check that "
+                f"`agent.cmd` can run a shell command."
+            )
+        if alive is False:
+            # It said it could not reach the app and the app is in fact down. That is
+            # the product, and calling it a harness problem would bury a real failure.
+            return _validate(kind, {RUNGS[kind]["group"]: [{
+                "name": "the app stayed up for the whole rung",
+                "assertions": [{
+                    "name": "the app answers a health probe after the rung",
+                    "expected": "a healthy response",
+                    "observed": f"no response. The agent also reported: {why}",
+                    "ok": False,
+                }],
+            }]})
+        raise AgentCheckFailed(
+            f"the agent reported it could not check anything: {why}. There is no health "
+            f"probe for this driver, so which side is broken is unknown -- and an "
+            f"unknown is never a pass."
+        )
+
     return _validate(kind, data)
+
+
+def _still_healthy(config: dict, app) -> "bool | None":
+    """Is the app answering right now? None when there is nothing to ask.
+
+    Only meaningful for the http driver. A cli or library app has no liveness to
+    probe, and inventing one would answer a question nobody asked.
+    """
+    if config.get("driver", "http") != "http" or not hasattr(app, "get"):
+        return None
+    path = config.get("http", {}).get("health_path", "/health")
+    want = config.get("http", {}).get("health_contains", "")
+    try:
+        status, body, _ = app.get(path)
+    except Exception:  # noqa: BLE001
+        return False
+    return status == 200 and (not want or want in body)
 
 
 # --- checking the report ------------------------------------------------------

@@ -75,9 +75,25 @@ Rules the harness enforces, so there is no advantage in bending them:
 - `observed` must be a real value or a real message. Not "as expected", not "ok".
 - Zero assertions is a failure, never a pass. A rung that ran nothing looks
   identical to a rung that passed unless somebody counts.
-- If you cannot reach the app at all, still write the file, with the reason in
-  `observed` and `ok: false`. Writing nothing reports as a broken harness rather
-  than a broken app, and sends whoever reads it to the wrong file.
+
+## If you cannot check anything at all
+
+Not "a journey failed". This is the case where you could not issue a single
+request: no shell, no HTTP client, nothing answering on the port. Say so as its
+own thing, because "I could not check" and "it is broken" have different remedies
+and the log has to name which one happened:
+
+```json
+{ "blocked": true,
+  "blocked_reason": "every HTTP client was refused: curl, python and node all returned 'This command requires approval'",
+  "journeys": [] }
+```
+
+Use it only when nothing ran. If you checked anything at all, report the
+assertions instead and mark the ones that failed.
+
+The harness re-probes the app itself before it believes you, so this does not get
+you a pass either way. It decides which of you gets named.
 
 ## What you do not do
 

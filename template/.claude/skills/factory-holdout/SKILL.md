@@ -53,7 +53,8 @@ Same shape as `factory-e2e`, with `scenarios` in place of `journeys`:
 ```
 
 The same rules are enforced: all four keys on every assertion, a real `observed`
-value, and zero assertions is a failure rather than a pass.
+value, and zero assertions is a failure rather than a pass. The `blocked` escape
+in `factory-e2e` applies here too, for the case where nothing ran at all.
 
 If a scenario cannot run because the product no longer has the feature it names,
 that is a failing assertion with the reason in `observed`. It is not your call to

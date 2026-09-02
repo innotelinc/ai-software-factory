@@ -1075,3 +1075,38 @@ expected" first used a partial anchor, which left an unbalanced parenthesis. It
 reported CAUGHT, because the interpreter refused the file before the check it was
 aimed at ever ran. A mutation that breaks the syntax measures the parser. Anchor on the
 whole line.
+
+## The journey agent shipped with a permission mode that could not run curl
+
+The first live run of the agent-driven end-to-end rung, in a clean room, against a
+working app.
+
+`AGENT_CLIS` defaulted to `claude -p --permission-mode acceptEdits`. That mode accepts
+file edits and still refuses `Bash`, so the agent could not issue a single request. It
+reported 13 of 13 assertions failed, and every one of them named exactly why:
+
+```
+observed: No request was ever sent. Every HTTP client invocation available to this
+agent was refused by the permission layer before execution. Bash 'curl -s -i
+http://127.0.0.1:58484/health' -> 'This command requires approval'; same with the
+absolute path, with PowerShell's Invoke-RestMethod, and with python -c. Non-network
+commands in the same session ran fine, so the shell works and curl is installed.
+This is an e2e driver/environment failure, NOT evidence about the application's
+behavior - the app's state is unknown and unverified.
+```
+
+**Two separate results, and the good one is easy to miss.** The agent could not check
+anything and did not claim it passed. That is the single behaviour this whole rung
+rests on, and it held on its first contact with a hostile environment.
+
+The bad one is that the default we shipped was the hostile environment. `--allowedTools
+Bash,Read,Write` alongside `acceptEdits` was measured working; `bypassPermissions` also
+works and grants more than the rung needs.
+
+**And the naming was wrong even though the verdict was right.** The gate printed
+`GATE_FAILED: e2e`, which reads as a broken product, when the product was fine. So a
+result may now carry `blocked: true`, and the harness RE-PROBES the app itself before
+believing it: app alive means the agent's environment is at fault and it is named
+`e2e-harness`; app dead means the product is at fault and it stays a failed assertion.
+Both branches fail the gate, so there is nothing to be gained by claiming to be
+blocked. Only the name moves, and it moves on evidence the harness gathered itself.

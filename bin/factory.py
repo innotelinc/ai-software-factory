@@ -203,8 +203,15 @@ def detect(root: Path) -> dict:
 # Headless invocations for the CLIs people actually have. The PROMPT ARRIVES ON
 # STDIN in every one of them, which is the only thing agentcheck.py assumes -- so a
 # CLI that is not on this list still works, it just has to be typed in by hand.
+# Only the `claude` invocation has been run end to end here. The others are the
+# documented headless form for each tool and are offered as a starting point.
 AGENT_CLIS = [
-    ("claude", "claude -p --permission-mode acceptEdits"),
+    # --allowedTools IS LOad-BEARING. `--permission-mode acceptEdits` alone accepts
+    # file edits and still refuses Bash, so the journey agent could not run curl,
+    # python, node or anything else that speaks HTTP. Measured: it reported 13 of 13
+    # assertions failed with "This command requires approval", which is the RIGHT
+    # behaviour from the agent and the wrong default from us.
+    ("claude", "claude -p --allowedTools Bash,Read,Write --permission-mode acceptEdits"),
     ("codex", "codex exec -"),
     ("pi", "pi --mode json --print"),
     ("goose", "goose run --instructions -"),
