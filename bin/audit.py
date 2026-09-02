@@ -584,6 +584,34 @@ def check_install_ships_a_runner(root: Path) -> None:
             return
 
 
+def check_deploy_result_is_read(root: Path) -> None:
+    """A failed deploy after a successful merge must not be silent.
+
+    The dispatcher ran `deploy.py` and discarded the result: the code merged, the deploy
+    broke, and the lap reported clean. It never mattered while FACTORY_DEPLOY_CMD was
+    unset, because deploy.py then prints DEPLOY_NOT_CONFIGURED and exits 0 -- so wiring
+    the fifth component turned a dormant hole into a live one, which is the general
+    shape worth watching for: a code path that only becomes reachable once a feature is
+    actually configured.
+    """
+    disp = root / "factory" / "dispatch.py"
+    if not disp.exists():
+        return
+    body = code_only(disp.read_text(encoding="utf-8"))
+    if "deploy.py" not in body:
+        return
+    # the deploy invocation must have its returncode inspected somewhere after it
+    idx = body.find("str(deploy)")
+    if idx < 0:
+        return
+    window = body[idx:idx + 900]
+    if "returncode" not in window:
+        fail("deploy result is read",
+             "dispatch.py runs deploy.py and never inspects the result, so a deploy that "
+             "fails after a successful merge is silent -- main ends up ahead of what is "
+             "running and nothing says so")
+
+
 def check_selftest_wired(root: Path) -> None:
     """The machinery self-test must exist, and the doctor must run it.
 
@@ -797,6 +825,7 @@ def main(argv: list[str]) -> int:
     check_watchdog_wired(root)
     check_guard_is_trusted(root)
     check_install_ships_a_runner(root)
+    check_deploy_result_is_read(root)
     check_lock_liveness(root)
     check_workflow_state_writes(root)
     check_trigger_parity(root)

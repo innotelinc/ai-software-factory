@@ -818,7 +818,48 @@ def main() -> int:
             if rc == 0:
                 deploy = Path(__file__).parent / "deploy.py"
                 if deploy.exists():
-                    subprocess.run([sys.executable, str(deploy)], cwd=str(config.ROOT))
+                    # THE RESULT IS CHECKED. This used to discard it, so a deploy that
+                    # failed after a successful merge was completely silent: the code
+                    # landed, the deploy broke, and the lap reported clean. It never
+                    # mattered while FACTORY_DEPLOY_CMD was unset, because deploy.py
+                    # then prints DEPLOY_NOT_CONFIGURED and exits 0 -- wiring the fifth
+                    # component turned a dormant hole into a live one.
+                    dep = subprocess.run(
+                        [sys.executable, str(deploy)], cwd=str(config.ROOT),
+                        capture_output=True, text=True, encoding="utf-8",
+                        errors="replace", timeout=1800,
+                    )
+                    tail = ((dep.stdout or "") + (dep.stderr or "")).strip()
+                    if dep.returncode != 0:
+                        # NOT an escalation of the pull request. The merge succeeded and
+                        # the code is on main; marking a merged PR needs-human sends a
+                        # person to look at something already done while leaving the real
+                        # problem -- an undeployed main -- unnamed.
+                        log(f"DEPLOY_FAILED after merging {target} (exit {dep.returncode})")
+                        for line in tail.splitlines()[-6:]:
+                            log(f"  {line[:200]}")
+                        log("  THE CODE IS MERGED. What failed is the deploy, so main is "
+                            "ahead of what is running.")
+                        try:
+                            config.NEEDS_HUMAN.parent.mkdir(parents=True, exist_ok=True)
+                            with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:
+                                fh.write(
+                                    f"- {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}  "
+                                    f"{target}  (deploy)  merged, but the deploy failed "
+                                    f"(exit {dep.returncode}). main is ahead of what is "
+                                    f"running.\n"
+                                )
+                        except OSError:
+                            pass
+                        log(notify.send(
+                            "the deploy",
+                            f"{target} merged but the deploy failed (exit "
+                            f"{dep.returncode}). main is ahead of what is running.",
+                        ))
+                    else:
+                        marker = "DEPLOYED" if "DEPLOYED" in tail else (
+                            "DEPLOY_NOOP" if "DEPLOY_NOOP" in tail else "deploy ran")
+                        log(f"DEPLOY_OK after merging {target}: {marker}")
             elif rc == 2:
                 # ALREADY HANDLED. The branch went stale while it was in flight --
                 # somebody pushed to main, which on any repo with velocity is Tuesday
