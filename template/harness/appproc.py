@@ -56,6 +56,29 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
+def unquote(token: str) -> str:
+    """Take one layer of matching surrounding quotes off a token.
+
+    Commands are split with `posix=False`, which is right on Windows because it
+    leaves backslashes in paths alone -- and wrong in that it leaves the QUOTES
+    attached to every token it split.
+
+    That was applied to argv[0] only, and the consequence on the rest was severe:
+    `python -c "import app"` arrived as the three tokens
+    `python`, `-c`, `"import app"`, so Python evaluated the STRING LITERAL
+    `"import app"` and exited 0. Measured: `python -c "import
+    definitely_not_a_module"` also exits 0. The library driver's import check --
+    the entire evidence behind `APP_STARTED driver=library` -- could not fail.
+    The Node equivalent this shipped later had exactly the same hole.
+
+    Stripping every token is what posix mode would have done, without giving up
+    the backslashes.
+    """
+    if len(token) > 1 and token[0] == token[-1] and token[0] in "\"'":
+        return token[1:-1]
+    return token
+
+
 def _argv(cmd: str) -> list[str]:
     """Split, then resolve argv[0] through PATHEXT.
 
@@ -63,12 +86,9 @@ def _argv(cmd: str) -> list[str]:
     system cannot find the file specified" -- which reads as "not installed" for a
     tool that is on PATH and works in any terminal.
     """
-    parts = shlex.split(cmd, posix=False)
+    parts = [unquote(t) for t in shlex.split(cmd, posix=False)]
     if parts:
-        head = parts[0]
-        if len(head) > 1 and head[0] == head[-1] and head[0] in "\"'":
-            head = head[1:-1]
-        parts[0] = shutil.which(head) or head
+        parts[0] = shutil.which(parts[0]) or parts[0]
     return parts
 
 

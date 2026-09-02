@@ -1182,3 +1182,48 @@ recurs: the loop was written `for step in ("static", "unit")`, and `step()` is t
 module-level printer. The loop variable shadowed it for the whole function, so `init`
 died with `UnboundLocalError` a hundred lines earlier, on a line nothing had touched.
 Only running it found that. Reading the diff would not have.
+
+## The import check that could not fail
+
+Found by an agent doing a fresh install from the README's own prompt, into a Node
+library. It reported the shipped `library.import_check` was a no-op, and it was right
+about more than it knew.
+
+Commands are split with `shlex.split(cmd, posix=False)`, which is correct on Windows
+because it leaves backslashes in paths alone. It also leaves the QUOTES attached to
+every token, and the code stripped them from `argv[0]` only. So the shipped default:
+
+```
+"import_check": "python -c \"import app\""
+```
+
+reached Python as three tokens, `python`, `-c`, `"import app"`. Python evaluated the
+string literal `"import app"`, which is a valid expression that does nothing, and
+exited 0.
+
+Measured:
+
+```
+python -c "import definitely_not_a_module_xyz"   ->  exit 0
+node   -e "require('./nope')"                    ->  exit 0
+```
+
+**`APP_STARTED driver=library` was unconditional.** That marker is one of the two the
+gate requires as proof the software ran at all, and for every library-driver project it
+had always been true regardless of whether anything imported. A missing module, a
+syntax error in the entry point, a broken package.json main: all of them passed.
+
+The docstring on the function had the whole argument written out, for `argv[0]`, and
+the same reasoning was never carried to the rest of the line.
+
+**Two things it cost, both of them mine.** Twenty minutes before this I had added a
+Node import check with the identical shape, having just fixed a different "empty is not
+pass" default in the same function. And the check I wrote to prove the fix worked would
+have passed either way until I ran it against a module that does not exist.
+
+`unquote()` now strips one layer of matching quotes from every token, in both
+`appproc._argv` and `ci.resolve`, which is what posix mode would have done without
+giving up the backslashes. Four self-test checks and two mutations hold it.
+
+**The rule.** When a check can only report success, it is not a check. The way to find
+out which kind you have is to point it at something that must fail and watch.

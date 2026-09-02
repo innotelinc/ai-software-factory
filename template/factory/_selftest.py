@@ -934,6 +934,48 @@ def floor_reader_agreement_checks() -> None:
 # aimed at the rejections, not at the happy path: a validator that accepts
 # everything passes a happy-path test perfectly.
 
+def argv_quoting_checks() -> None:
+    """A quoted argument must reach the program unquoted.
+
+    THE INCIDENT: commands are split with posix=False so Windows paths keep their
+    backslashes, and the quotes were stripped from argv[0] only. So
+    `python -c "import app"` reached Python as the three tokens
+    python / -c / "import app", and Python evaluated the STRING LITERAL and exited 0.
+    Measured: `python -c "import definitely_not_a_module"` also exited 0. The library
+    driver's import check could not fail, which means `APP_STARTED driver=library` was
+    unconditional -- proof-the-app-ran that proved nothing.
+    """
+    hpath = str(Path(__file__).resolve().parent.parent / "harness")
+    if hpath not in sys.path:
+        sys.path.insert(0, hpath)
+    try:
+        import appproc  # noqa: PLC0415
+        import ci  # noqa: PLC0415
+    except Exception as e:  # noqa: BLE001
+        check("harness/appproc.py and ci.py import", False, str(e))
+        return
+
+    got = appproc._argv('python -c "import definitely_not_a_module"')
+    check("the driver hands -c an unquoted argument",
+          got[-1] == "import definitely_not_a_module",
+          "got " + repr(got[-1]) + " -- quoted, so the interpreter evaluates a string "
+          "literal and exits 0 whatever is inside it")
+    check("the driver keeps the argument as ONE token", len(got) == 3,
+          "got " + repr(got))
+
+    got = ci.resolve(["python", "-c", '"import definitely_not_a_module"'])
+    check("the gate ladder hands -c an unquoted argument too",
+          got[-1] == "import definitely_not_a_module",
+          "got " + repr(got[-1]) + " -- the same hole on the other side of the harness")
+
+    # Backslashes are the reason posix=False is used at all, so they must survive.
+    win = '"C:' + chr(92) + 'Program Files' + chr(92) + 'node.exe" -e x'
+    got = appproc._argv(win)
+    check("a quoted Windows path keeps its backslashes",
+          "Program Files" in got[0] and chr(92) in got[0],
+          "got " + repr(got[0]))
+
+
 def ratchet_source_checks() -> None:
     """The floor keys read the markers the harness actually prints.
 
@@ -1108,6 +1150,7 @@ def main() -> int:
     floor_reader_agreement_checks()
     agentcheck_checks()
     ratchet_source_checks()
+    argv_quoting_checks()
 
     if FAILURES:
         if not quiet:

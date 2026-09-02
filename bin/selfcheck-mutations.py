@@ -107,6 +107,13 @@ DEFECTS = [
     ("a floor key names a marker the harness never prints", "factory/gate.py",
      '"e2e_journeys": counted(log, "E2E_PASSED journeys"),',
      '"e2e_journeys": counted(log, "E2E_PASSED nothing"),', True),
+    # THE QUOTES. Only argv[0] used to be unquoted, and the library driver's import
+    # check could not fail as a result.
+    ("only argv[0] gets its quotes stripped again", "harness/appproc.py",
+     "    parts = [unquote(t) for t in shlex.split(cmd, posix=False)]",
+     "    parts = shlex.split(cmd, posix=False)", True),
+    ("the gate ladder stops unquoting its arguments", "harness/ci.py",
+     "    argv = [unquote(t) for t in argv]", "    argv = list(argv)", True),
     ("the shipped floor counts agent-chosen assertions again",
      ".factory/locks/floor.json",
      '"e2e_journeys": 0,', '"e2e_steps_asserted": 0,', True),

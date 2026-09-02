@@ -58,6 +58,29 @@ for _s in (sys.stdout, sys.stderr):
 CONFIG = json.loads((HERE / "harness.config.json").read_text(encoding="utf-8"))
 
 
+def unquote(token: str) -> str:
+    """Take one layer of matching surrounding quotes off a token.
+
+    Commands are split with `posix=False`, which is right on Windows because it
+    leaves backslashes in paths alone -- and wrong in that it leaves the QUOTES
+    attached to every token it split.
+
+    That was applied to argv[0] only, and the consequence on the rest was severe:
+    `python -c "import app"` arrived as the three tokens
+    `python`, `-c`, `"import app"`, so Python evaluated the STRING LITERAL
+    `"import app"` and exited 0. Measured: `python -c "import
+    definitely_not_a_module"` also exits 0. The library driver's import check --
+    the entire evidence behind `APP_STARTED driver=library` -- could not fail.
+    The Node equivalent this shipped later had exactly the same hole.
+
+    Stripping every token is what posix mode would have done, without giving up
+    the backslashes.
+    """
+    if len(token) > 1 and token[0] == token[-1] and token[0] in "\"'":
+        return token[1:-1]
+    return token
+
+
 def resolve(argv: list[str]) -> list[str]:
     """Make argv[0] something the OS can actually execute.
 
@@ -76,11 +99,10 @@ def resolve(argv: list[str]) -> list[str]:
     """
     if not argv:
         return argv
-    head = argv[0]
-    if len(head) > 1 and head[0] == head[-1] and head[0] in "\"'":
-        head = head[1:-1]
-    found = shutil.which(head)
-    return [found or head, *argv[1:]]
+    # EVERY token, not just argv[0]. See unquote() for what only doing the head
+    # cost: an import check that could not fail.
+    argv = [unquote(t) for t in argv]
+    return [shutil.which(argv[0]) or argv[0], *argv[1:]]
 
 
 def run(step: str, cmd: str | list[str], timeout: int = 600) -> tuple[int, str]:
