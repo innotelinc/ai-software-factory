@@ -281,20 +281,35 @@ def run_rung(kind: str, config: dict, app, only: str = "") -> tuple[int, int, li
 
     groups, assertions, failures = _validate(kind, data)
 
-    # AN ALL-GREEN REPORT FROM AN APP THAT IS NO LONGER THERE IS NOT EVIDENCE. The
-    # gate cannot re-check anything gathered somewhere it cannot reach, and a process
-    # left listening on another port holds it and poisons the next lap.
+    # THE HARNESS HAS TO GET THE APP BACK. A journey can legitimately end with the
+    # process stopped -- "the list survives a restart" is a journey, and the agent
+    # may well stop it last. What is not acceptable is the next rung running against
+    # a port nobody is listening on and reporting that as a broken product.
     #
-    # Only checked when the report is otherwise clean. If assertions already failed,
-    # those are the finding and a dead app is a symptom of them, not a second
-    # complaint to bury the first under.
-    if not failures and _still_healthy(config, app) is False:
-        raise AgentCheckFailed(
-            f"every assertion passed, but the app is not answering at "
-            f"{getattr(app, 'base', 'the address it was given')}. A restart has to "
-            f"come back on the same port; anything else means this report describes "
-            f"an app the gate never saw."
-        )
+    # The FIRST version of this failed the rung outright, and it fired on its first
+    # real run against a report that was fine. Demanding the app be up afterwards
+    # confuses housekeeping with evidence: the assertions and their observed values
+    # are the evidence, and they stand on their own.
+    #
+    # So: if it is down, put it back. Only a failure to come back is a failure, and
+    # then it is named as the harness rather than the product.
+    if _still_healthy(config, app) is False:
+        print("APP_DOWN_AFTER_RUNG restarting it for the next one", flush=True)
+        try:
+            app.__exit__(None, None, None)
+            app.__enter__()
+        except Exception as e:  # noqa: BLE001
+            raise AgentCheckFailed(
+                f"the app was not answering after the {kind} rung and would not "
+                f"restart: {e}. Anything the agent started on a different port is "
+                f"still running and holding it."
+            ) from None
+        if _still_healthy(config, app) is False:
+            raise AgentCheckFailed(
+                f"the app was not answering after the {kind} rung and did not come "
+                f"back on {getattr(app, 'base', 'its port')}. The next rung would run "
+                f"against nothing and report it as a broken product."
+            )
 
     return groups, assertions, failures
 

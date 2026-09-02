@@ -1227,3 +1227,28 @@ giving up the backslashes. Four self-test checks and two mutations hold it.
 
 **The rule.** When a check can only report success, it is not a check. The way to find
 out which kind you have is to point it at something that must fail and watch.
+
+## The check that confused housekeeping with evidence
+
+Added in the morning, fired on its first real run, and was wrong.
+
+The agent-driven rungs let the agent restart the app when a journey cannot be true
+otherwise. Nothing checked that it came back, so a report could describe an app on a
+port the gate never saw, with a process left holding it. The check added for that
+failed the rung whenever an all-green report was followed by a silent port.
+
+It fired on a clean run: `every assertion passed, but the app is not answering ...
+GATE_FAILED: e2e-harness`. The report was fine. The agent had simply stopped the
+process last, which is a legitimate way for a restart-flavoured journey to end.
+
+**The assertions and their observed values are the evidence. Whether a port is open
+afterwards is housekeeping.** Conflating the two turned a correct run into a red gate,
+which is the same class of error as the opposite one and costs the same trust.
+
+So the rung puts the app back rather than complaining about it, and only a failure to
+RESTART is a failure. It is still named `e2e-harness` rather than `e2e`, because a
+harness that cannot get the app back is not a broken product.
+
+**Worth noting about the sequence.** The over-strict version was written to close a
+real hole, in the same sitting, and it looked obviously correct in the diff. One run
+against a real agent was what separated them.
