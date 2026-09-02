@@ -947,3 +947,44 @@ just the verdict. "Nine entries" is a testable claim about a known file; "the wa
 did not fire" is not. Two of the three were found only by writing a real MISSION into a
 real install -- neither was reachable from this repository, because this repository has
 no MISSION of its own to parse.
+
+
+## Rollback had never been run, and was wrong four ways
+
+The path you reach for when something is already broken. It had never executed once, in
+any repository, and running it a single time in the clean room found four separate
+faults -- each of which would have surfaced during an actual outage.
+
+**1. It left the repository armed.** `git checkout <previous> -- .` rewrites the working
+tree and STAGES that, and the function returned there. HEAD never moved, so the repo was
+left holding a staged revert of everything since -- twelve files on the real run, among
+them MISSION.md and factory/config.py. The next commit by anyone would have committed
+that revert. This is the `update-ref` incident merge.py already carries a long warning
+about, reproduced in a second file and armed at the worst possible moment.
+
+**2. It produced a hybrid, not the previous tree.** `git checkout <sha> -- .` restores
+what exists in `<sha>` and cannot remove what was ADDED since, so a rollback to a commit
+predating a file leaves that file at its current content. Measured: rolling back to the
+`darkfactory init` commit produced a release still containing the feature being rolled
+back, reported as `ROLLED_BACK`.
+
+**3. It failed opaquely when the target was too old.** Removing files added since can
+remove the deploy script itself, and the failure read as `python: can't open file ...`
+-- a broken deploy rather than a target that predates it.
+
+**4. The pointer did not move, so the NEXT deploy was a silent no-op.** `record()`
+appended to the history log while `deployed.json` was written only on the forward path.
+A rollback therefore left the pointer naming the sha it had just rolled AWAY from, and
+the next deploy read that pointer, decided it was already current, and did nothing. So
+after a rollback you could merge the fix, run the deploy, be told everything was
+current, and still be serving the rolled-back build. **The mechanism that exists to
+prevent redundant work prevented the one deploy that mattered.**
+
+**The shape of the fourth one is worth keeping**: two writers of one fact. The history
+and the pointer are the same claim recorded twice, and only one path updated both.
+`record()` now owns both.
+
+**The general lesson.** Every one of these is invisible to reading. The code is short
+and each line is defensible; the faults are in what the sequence LEAVES BEHIND, which
+only running it can show. A recovery path that has never been executed is not a recovery
+path, it is a plan -- and the day you find out is the day you needed it.

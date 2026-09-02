@@ -31,6 +31,7 @@ that nobody is watching it.
 from __future__ import annotations
 
 import re
+import json
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -73,9 +74,26 @@ def run(cmd: str, timeout: int = 900) -> tuple[int, str]:
 
 
 def record(sha: str, note: str) -> None:
+    """Append to the history AND move the pointer. One writer, one fact.
+
+    These used to be separate: this appended to the log, and `deployed.json` was written
+    only on the forward-deploy path. So a rollback left the pointer naming the sha it
+    had just rolled AWAY from, and the next deploy read that pointer, decided the sha
+    was already current, and did nothing. After a rollback you could merge the fix, run
+    the deploy, be told DEPLOY_NOOP, and still be serving the rolled-back build.
+
+    A pointer that disagrees with reality is worse than no pointer, because the no-op it
+    causes looks exactly like success.
+    """
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
     with HISTORY.open("a", encoding="utf-8") as fh:
-        fh.write(f"{datetime.now(timezone.utc).isoformat()} {sha} {note}\n")
+        fh.write(f"{now} {sha} {note}" + chr(10))
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(
+        json.dumps({"sha": sha, "at": now, "how": note}, indent=2) + chr(10),
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -97,13 +115,90 @@ def main(argv: list[str]) -> int:
             print("ROLLBACK_FAILED: no previous successful deploy to roll back to")
             return 1
         previous = lines[-2].split()[1]
+
+        # REFUSE ON A DIRTY TREE. The checkout below overwrites tracked files, so
+        # running it over uncommitted work destroys that work with no way back. Same
+        # rule merge.py applies before it fast-forwards a checkout somebody is using:
+        # not rolling back is recoverable, eating an afternoon of edits is not.
+        rc_status, dirty = run("git status --porcelain --untracked-files=no")
+        if rc_status == 0 and dirty.strip():
+            print(
+                "ROLLBACK_REFUSED: the working tree has uncommitted changes.\n"
+                "  Rolling back overwrites tracked files from the previous deploy, which\n"
+                "  would destroy them. Commit or stash first.\n"
+                f"  {len(dirty.strip().splitlines())} file(s) changed."
+            )
+            return 1
+
+        # THE OLD FILES EXIST ONLY FOR THE DURATION OF THE DEPLOY COMMAND.
+        #
+        # This used to check out the previous commit over the working tree and simply
+        # return, leaving the repo holding a STAGED REVERT of everything since -- twelve
+        # files on a real rollback, including MISSION.md and factory/config.py. HEAD had
+        # not moved, so the next commit by anyone, for any reason, would have committed
+        # that revert. It is the `update-ref` incident wearing different clothes, and it
+        # was armed at the exact moment people are moving fastest.
+        #
+        # A rollback restores the running SOFTWARE. It has no business rewriting the
+        # rules the factory is governed by, and it must hand the repository back exactly
+        # as it found it.
+        # FILES ADDED SINCE <previous> MUST GO, or the artefact is a hybrid.
+        #
+        # `git checkout <sha> -- .` restores what exists in <sha> and cannot remove what
+        # does not. Rolling back to a commit that predates a file leaves that file at
+        # its CURRENT content, so the build is old code for old files and new code for
+        # new ones -- neither version, reported as a successful rollback.
+        #
+        # Measured: a rollback to the `darkfactory init` commit, which predates `app/`
+        # entirely, produced a release still containing the feature being rolled back.
+        rc_added, added = run(
+            f"git diff --name-only --diff-filter=A {previous} HEAD")
+        added_files = [ln.strip() for ln in added.splitlines() if ln.strip()] if rc_added == 0 else []
+
+        # YOU CANNOT ROLL BACK PAST YOUR OWN DEPLOY SCRIPT, and saying so beats
+        # letting the shell report it. Removing files added since <previous> can
+        # remove the very script FACTORY_DEPLOY_CMD invokes, and the failure then
+        # surfaces as "python: can't open file ..." followed by ROLLBACK_FAILED,
+        # which reads like the deploy is broken rather than like the target is too old.
+        _referenced = [f for f in added_files
+                       if f and (f in config.DEPLOY_CMD or Path(f).name in config.DEPLOY_CMD)]
+        if _referenced:
+            print(
+                f"ROLLBACK_REFUSED: {previous} predates the deploy command itself.\n"
+                f"  FACTORY_DEPLOY_CMD is {config.DEPLOY_CMD!r}, and these were added\n"
+                f"  after that commit: {' '.join(_referenced[:4])}\n"
+                f"  There is nothing at {previous} that knows how to deploy this, so\n"
+                f"  the rollback would build from a tree that cannot build. Roll back\n"
+                f"  to a commit that has the deploy script, or redeploy a known sha."
+            )
+            return 1
+
+        # Remove them BEFORE the deploy command reads the tree, not after.
+        if added_files:
+            _quoted = " ".join(f'"{f}"' for f in added_files)
+            run(f"git rm --quiet --force --ignore-unmatch -- {_quoted}")
         rc, out = run(f"git checkout {previous} -- . && {config.DEPLOY_CMD}")
         print(out[-2000:])
+        if added_files:
+            print(f"ROLLBACK_REMOVED_ADDED files={len(added_files)} "
+                  f"(they do not exist in {previous})")
+        restore_rc, restore_out = run("git checkout HEAD -- . && git reset --quiet")
+        if restore_rc != 0:
+            # Say so LOUDLY. A rollback that deployed and then could not put the tree
+            # back has left the repository in the armed state described above, and that
+            # is worse than the outage being rolled back.
+            print(
+                "ROLLBACK_TREE_NOT_RESTORED: the deploy ran but the working tree could\n"
+                "  not be returned to HEAD. The repo is holding a staged revert -- do NOT\n"
+                "  commit here until `git checkout HEAD -- . && git reset` succeeds.\n"
+                f"  {restore_out.strip()[:300]}"
+            )
+            return 1
         if rc != 0:
             print("ROLLBACK_FAILED")
             return 1
         record(previous, "rollback")
-        print(f"ROLLED_BACK to={previous}")
+        print(f"ROLLED_BACK to={previous} (working tree restored to HEAD)")
         return 0
 
     git("fetch", "--quiet", "origin", config.BASE_BRANCH)
@@ -178,13 +273,10 @@ def main(argv: list[str]) -> int:
             return 1
     print(f"HEALTH_CHECK_OK markers={len(config.HEALTH_MARKERS)}")
 
-    import json
-
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(
-        json.dumps({"sha": sha, "at": datetime.now(timezone.utc).isoformat()}, indent=2),
-        encoding="utf-8",
-    )
+    # ONE WRITER. `record()` moves the pointer and appends the history together, so
+    # they cannot disagree. This used to write the pointer here as well, which is how a
+    # rollback -- which only called record() -- left the pointer naming the sha it had
+    # just rolled away from.
     record(sha, "deploy")
     print(f"DEPLOYED sha={sha}")
     return 0
