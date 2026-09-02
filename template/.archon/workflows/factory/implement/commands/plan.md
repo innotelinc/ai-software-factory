@@ -6,7 +6,7 @@ argument-hint: (no arguments -- reads $ARTIFACTS_DIR/issue.md and priming.md)
 # Node 2 · Plan
 
 > **THIS PROMPT IS THE PERSONALISATION LAYER.** Replace it with your own planning
-> step — the one you actually read today. What ships here is the shape.
+> step -- the one you actually read today. What ships here is the shape.
 
 **Run the `piv-plan-implementation` skill if this project has one.** Otherwise work
 the structure below.
@@ -35,12 +35,12 @@ work that was mostly correct.
 
 ## Inputs
 
-- `$ARTIFACTS_DIR/issue.md` — the issue, as filed. **This is the ticket.**
-- `$ARTIFACTS_DIR/priming.md` — node 1's orientation
-- `$ARTIFACTS_DIR/MISSION.md` — scope, invariants, and the definition of done
-- `$ARTIFACTS_DIR/FACTORY_RULES.md` — how this runs unattended
-- `$ARTIFACTS_DIR/CLAUDE.md` — conventions
-- `$ARTIFACTS_DIR/decisions.md`, if present — decisions already made. **Read it
+- `$ARTIFACTS_DIR/issue.md` -- the issue, as filed. **This is the ticket.**
+- `$ARTIFACTS_DIR/priming.md` -- node 1's orientation
+- `$ARTIFACTS_DIR/MISSION.md` -- scope, invariants, and the definition of done
+- `$ARTIFACTS_DIR/FACTORY_RULES.md` -- how this runs unattended
+- `$ARTIFACTS_DIR/CLAUDE.md` -- conventions
+- `$ARTIFACTS_DIR/decisions.md`, if present -- decisions already made. **Read it
   before you consider stopping for anything.**
 
 ## Inherit, do not re-decide
@@ -52,7 +52,7 @@ issue: say so and escalate rather than planning the change.
 ## You cannot run anything, and the implement node nearly cannot either
 
 **You have Read, Glob, Grep and Write. No shell at all.** Do not plan to measure
-something yourself; you will be refused, and the refusal is silent — the request goes
+something yourself; you will be refused, and the refusal is silent -- the request goes
 to a human who is not there. State the measurement as the implement node's first task
 instead.
 
@@ -68,7 +68,7 @@ this before it executes.
 
 **Out of scope / non-goals.** Name what a reasonable reader might assume is included
 and is not. Unattended, this is the only thing standing between a two-file change and
-a nine-file one — and the guard's file cap will reject the nine-file version outright.
+a nine-file one -- and the guard's file cap will reject the nine-file version outright.
 
 **Every task carries an executable validation command.** Not "verify it works". The
 command, verbatim, as the implement node will type it. Those commands are all it has
@@ -76,14 +76,14 @@ to go on.
 
 **The test task.** A bug fix comes with a regression test that fails on the base
 branch and passes on this one. A feature comes with tests for its behaviour. Say
-where they go — the project's own test directory, never `harness/`, which is
+where they go -- the project's own test directory, never `harness/`, which is
 protected because it is the definition of "working" and a builder that can edit its
 own judge can make any claim true.
 
 **The observability task.** If this change introduces a value that moves as a
 consequence of use, exposing it somewhere the harness can see is **part of this
 change**, not follow-up work. A value that moves and is not observable cannot be
-proven to work by anybody, ever — and in a repo that merges without review, that
+proven to work by anybody, ever -- and in a repo that merges without review, that
 means it cannot be built. This is the one hole in the harness that only a plan can
 close: the gate will not catch it.
 
@@ -101,11 +101,11 @@ treat them as though they are.
 
 ### The two kinds of value, and only one of them stops you
 
-- **A JUDGEMENT value decides what counts as passing** — anything in
+- **A JUDGEMENT value decides what counts as passing** -- anything in
   `.factory/locks/`, a floor, a tolerance, a sample size, a required marker, a
   deliberate defect. **Never choose one. Ever.** Picking these is tuning the judge,
   and a factory that tunes its own judge is not being checked by anything.
-- **A PRODUCT value decides what the software does** — a price, a rate, a default, a
+- **A PRODUCT value decides what the software does** -- a price, a rate, a default, a
   copy string, a layout, a name. **Choose it, and record it.** A spec that leaves one
   open means "I have not decided", not "you may not propose".
 
@@ -138,14 +138,14 @@ quarter needs something on the stop list, **plan the three quarters** and write 
 rest into `$ARTIFACTS_DIR/FOLLOWUP` as a follow-up issue. Downing tools on a whole
 issue because one sub-question is open is the most expensive habit this node has.
 
-### The stop list — write `$ARTIFACTS_DIR/ESCALATE` and stop ONLY for these
+### The stop list -- write `$ARTIFACTS_DIR/ESCALATE` and stop ONLY for these
 
-1. **A judgement value would have to change** — a lock, a floor, a tolerance, a
+1. **A judgement value would have to change** -- a lock, a floor, a tolerance, a
    sample size, a deliberate defect, a required marker. Including "just to make this
    pass".
 2. **A protected file would have to change** (`FACTORY_RULES.md` §5).
 3. **A MISSION invariant would have to change**, or the issue contradicts one.
-4. **The blast radius is on the irreversible list** in `FACTORY_RULES.md` — a schema
+4. **The blast radius is on the irreversible list** in `FACTORY_RULES.md` -- a schema
    migration, deletion, money, auth, anything reaching real users in a way a revert
    does not undo.
 5. **Two governance statements genuinely contradict each other**, so any plan
@@ -160,10 +160,10 @@ attached is a yes/no; a bare question is a design session someone has to schedul
 Give your recommended value, your reasoning, and what you would do if overruled.
 
 Check `decisions.md` first. If the decision you need is already answered there, **use
-it and cite it** — it is not open any more.
+it and cite it** -- it is not open any more.
 
 ## Report
 
 The path to the plan, the complexity, the key risks, and a confidence score out of 10
-for one-pass success. **Below 6, escalate instead** — a plan you do not believe in is
+for one-pass success. **Below 6, escalate instead** -- a plan you do not believe in is
 cheaper to abandon here than after three fix attempts.

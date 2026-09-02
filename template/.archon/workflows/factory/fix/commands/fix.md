@@ -12,13 +12,13 @@ argument-hint: (no arguments -- reads $ARTIFACTS_DIR/findings.md)
 
 ## What you get, and what you do not
 
-- **`$ARTIFACTS_DIR/findings.md`** — what the validator objected to. **Read this
+- **`$ARTIFACTS_DIR/findings.md`** -- what the validator objected to. **Read this
   first, in full, before editing anything.**
-- **`$ARTIFACTS_DIR/gate.log`** — the raw output of the checks. Read it when a
+- **`$ARTIFACTS_DIR/gate.log`** -- the raw output of the checks. Read it when a
   finding names a check: the log says what the check actually printed, the finding
   says what the judge made of it, and when they differ the log is the ground truth.
-- **`$ARTIFACTS_DIR/issue.md`** — the original ask, so the fix stays inside it.
-- **`$ARTIFACTS_DIR/MISSION.md`** and **`FACTORY_RULES.md`** — what you cannot do.
+- **`$ARTIFACTS_DIR/issue.md`** -- the original ask, so the fix stays inside it.
+- **`$ARTIFACTS_DIR/MISSION.md`** and **`FACTORY_RULES.md`** -- what you cannot do.
 
 **You do not get the plan or the implementation report**, deliberately. A fix that
 re-reads the plan tends to re-argue the plan rather than address the finding, and the
@@ -30,7 +30,7 @@ Take the findings **one at a time, highest severity first**. For each one:
 
 1. Say what was actually wrong.
 2. Fix it at the source.
-3. Where the finding is a behaviour, add or extend a test that proves it — in the
+3. Where the finding is a behaviour, add or extend a test that proves it -- in the
    project's own test directory, never in `harness/`.
 
 ## The prohibition that matters most here
@@ -43,13 +43,13 @@ exact comparison into "not none".**
 
 All of these turn the light off rather than fix the wiring, and all of them are an
 auto-reject. `harness/`, `.factory/locks/` and `.factory/holdout/` are protected
-paths, so the attempt fails rather than succeeding quietly — **read that as the
+paths, so the attempt fails rather than succeeding quietly -- **read that as the
 design working, not as an obstacle.**
 
 If fixing the finding genuinely requires changing a check, then the finding is not a
 code bug, and the correct move is to **say so and stop**. Write what you found and
 why the check itself is wrong. That is an escalation and it is a perfectly good
-outcome — a better one than a second failed cycle.
+outcome -- a better one than a second failed cycle.
 
 ## Stay inside the ask
 
@@ -70,7 +70,7 @@ python harness/ci.py --quick
 
 **Do not substitute another way of running the tests.** Anything else you would
 normally reach for is denied to this node, and a denied command is a fix that never
-got checked — the run then completes having committed something nobody executed.
+got checked -- the run then completes having committed something nobody executed.
 
 ## You do not commit, push, or re-label
 
@@ -85,20 +85,20 @@ decide the change worked.
 Write `$ARTIFACTS_DIR/fix-report.md`:
 
 ```markdown
-# Fix — attempt N
+# Fix -- attempt N
 
 ## Findings addressed
 - [severity] <finding> → <what changed, and where> → <the test that proves it>
 
 ## Findings NOT addressed
-<each one, and why. "I disagree" is a legitimate entry — say what the validator
+<each one, and why. "I disagree" is a legitimate entry -- say what the validator
 missed. So is "this needs a check changed, which I may not do".>
 
 ## Validation
 <the quick gate's output>
 
 ## Anything I was denied
-<tools you asked for and could not have — or "none">
+<tools you asked for and could not have -- or "none">
 ```
 
 If you do not believe the findings are fixable within scope, **say so now** rather

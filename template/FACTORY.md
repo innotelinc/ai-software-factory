@@ -8,7 +8,7 @@
   This file is on the protected list. The factory cannot edit it.
 -->
 
-**Current autonomy level: <N>** — <one line: what is automatic at this level>
+**Current autonomy level: <N>** -- <one line: what is automatic at this level>
 **Raised to this level on:** <YYYY-MM-DD>
 **Stop button:** `touch .factory/STOP`, or label any open issue `factory:stop`
 **Built from:** <path or URL of the spec `MISSION.md` was compressed from>
@@ -38,7 +38,7 @@ prime -> plan -> implement -> commit -> guard -> self-check -> review -> open PR
 |---|-----------|---------------------|
 | 1 | Workflow-driven repo | Archon, five workflows in `.archon/workflows/factory/` |
 | 2 | The trigger | `factory/dispatch.py` every <N> minutes, `factory/regress-trigger.py` weekly |
-| 3 | Deployment | <strategy — or "not yet closed; merging is where this stops"> |
+| 3 | Deployment | <strategy -- or "not yet closed; merging is where this stops"> |
 | 4 | Guidance layer | `MISSION.md` · `FACTORY_RULES.md` · `CLAUDE.md` |
 | 5 | Validation harness | `harness/ci.py`, holdout at `.factory/holdout/`, <N> deliberate defects |
 
@@ -49,18 +49,18 @@ prime -> plan -> implement -> commit -> guard -> self-check -> review -> open PR
 Everything else is a prompt instruction, which is a suggestion with good manners.
 These are the ones a model cannot argue past:
 
-1. **`factory/gate.py`** — asserts every required marker, checks the counts against
+1. **`factory/gate.py`** -- asserts every required marker, checks the counts against
    the ratchet, and **overrides the judge when the raw output disagrees with it**.
-2. **`factory/merge.py`** — re-checks the guard and the merge state itself before
+2. **`factory/merge.py`** -- re-checks the guard and the merge state itself before
    touching a branch. It does not trust that the gate already did.
-3. **`factory/guard.py`** — the protected list and the two caps. Fails **closed**: a
+3. **`factory/guard.py`** -- the protected list and the two caps. Fails **closed**: a
    diff that cannot be computed is not a diff that was checked.
-4. **`factory/state.py`** — the transition table. A node that wants a move the table
+4. **`factory/state.py`** -- the transition table. A node that wants a move the table
    forbids has misunderstood something, and inventing the transition would bury it.
 5. **The `held` state.** A hold is not a message: a PR the gate held gets
    `factory:held`, which nothing dispatches and no node may leave. Only a human moves
    it back to `open` for a fresh validation.
-6. **`factory/_selftest.py`** — and this one checks the four above. What counts as
+6. **`factory/_selftest.py`** -- and this one checks the four above. What counts as
    alive, what counts as passed, what may move: each was once wrong in a way that read
    as a quiet, healthy repository. `doctor` runs it on every audit.
 
@@ -97,7 +97,7 @@ this on every run; record here the last time you watched it happen on purpose.
 built to measure.** A perfect score where everything is caught by the unit suite means
 "the unit suite can fail", not "the gate can fail".
 
-**Known gaps, stated rather than hidden:** <a rung you do not have — e.g. no browser,
+**Known gaps, stated rather than hidden:** <a rung you do not have -- e.g. no browser,
 so no presentation defect. A defect nothing can catch is worse than the gap.>
 
 ---
@@ -113,7 +113,7 @@ so no presentation defect. A defect nothing can catch is worse than the gap.>
 | `unit_tests` | <N> | <...> |
 
 **Slack pins the dial.** The gap between observed and floor is exactly how many
-assertions could be deleted with the gate still green — and it *grows* as the harness
+assertions could be deleted with the gate still green -- and it *grows* as the harness
 improves, because raising the floor is a protected edit the factory cannot make. So
 any slack caps autonomy at level 2 until a human raises the numbers. That is
 deliberate: printing slack as a note and carrying on is how the hole widens forever.

@@ -125,12 +125,26 @@ class HttpApp:
                 status, body, _ = self.get(path)
                 if status == 200 and (not want or want in body):
                     return
-                last = f"status={status} body={body[:160]!r}"
+                # NAME WHICH CONDITION FAILED. The first version reported "never
+                # became healthy" and then printed a 200 with a healthy-looking
+                # body, because the failing half was the CONTAINS check: the
+                # configured string had no space after the colon and the app's JSON
+                # did. That reads as a dead app, so the next hour goes on the
+                # server, and the actual fix is one character in a config file.
+                if status != 200:
+                    last = f"answered {status}, wanted 200. body={body[:160]!r}"
+                else:
+                    last = (
+                        f"answered 200 but the body does not contain "
+                        f"health_contains={want!r}. Got {body[:160]!r}. The app is "
+                        f"UP; it is the string in harness.config.json that does not "
+                        f"match"
+                    )
             except (urllib.error.URLError, OSError) as e:
                 last = f"not accepting connections yet ({e})"
             time.sleep(0.2)
         raise AppDidNotStart(
-            f"never became healthy in time. Last: {last}. This is a FAILURE, not "
+            f"{path} never became healthy in time. {last}. This is a FAILURE, not "
             f"'not testable'."
         )
 

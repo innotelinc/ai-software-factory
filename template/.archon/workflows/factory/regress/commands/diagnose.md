@@ -6,13 +6,13 @@ argument-hint: (no arguments -- reads $ARTIFACTS_DIR/regress.log)
 # Diagnose the regression
 
 The scheduled gate ran against `main` and went red. Your job is to turn that log into
-**issues a factory can build from** — or to say, clearly, that this was not a product
+**issues a factory can build from** -- or to say, clearly, that this was not a product
 failure at all.
 
 ## Read
 
-- `$ARTIFACTS_DIR/regress.log` — the full output of the run
-- `MISSION.md` — so an issue you file is one triage can accept
+- `$ARTIFACTS_DIR/regress.log` -- the full output of the run
+- `MISSION.md` -- so an issue you file is one triage can accept
 - `git log -20 --oneline` and `git show` on the recent merges, to name a suspect
 
 ## First, the question that decides everything else
@@ -33,35 +33,35 @@ next run; a fabricated backlog is found by a person.
 
 ## Then, one finding per actual failure
 
-Not one per red line — **per distinct cause**. Six assertions failing because one
+Not one per red line -- **per distinct cause**. Six assertions failing because one
 function returns the wrong shape is ONE finding.
 
 Each finding needs to survive being read cold by triage and then by a plan node that
 has never seen this log:
 
-- **`title`** — what a user would notice, not which assertion failed.
+- **`title`** -- what a user would notice, not which assertion failed.
   Bad: `test_settle_minimal failed`.
   Good: `Settling up suggests more transfers than necessary after a member leaves`.
   The title is also the dedup key, so keep it stable across runs of the same defect.
 
-- **`body`** — a real issue, in the shape this repo's issues take:
-  - **What happens** — the observable symptom, with the exact assertion and the
+- **`body`** -- a real issue, in the shape this repo's issues take:
+  - **What happens** -- the observable symptom, with the exact assertion and the
     values from the log.
-  - **What should happen** — the observable difference, not "it should pass".
-  - **Reproduction** — the steps, taken from what the harness did.
-  - **Evidence** — the relevant excerpt of the log, fenced. Trim it to what matters;
+  - **What should happen** -- the observable difference, not "it should pass".
+  - **Reproduction** -- the steps, taken from what the harness did.
+  - **Evidence** -- the relevant excerpt of the log, fenced. Trim it to what matters;
     a 400-line paste is a body nobody reads.
-  - **Suspect** — recent commits that touched the area, with SHAs, and why you
+  - **Suspect** -- recent commits that touched the area, with SHAs, and why you
     suspect them. Say "unclear" if it is unclear. A confident wrong suspect costs
     more than an honest shrug.
-  - **Which rung caught it** — static, unit, e2e, holdout or mutation. It tells the
+  - **Which rung caught it** -- static, unit, e2e, holdout or mutation. It tells the
     fixer how far from the surface the defect is.
 
-- **`severity`** — `critical` if merged code is broken for every user or data is at
+- **`severity`** -- `critical` if merged code is broken for every user or data is at
   risk; `high` if a core capability is broken; `medium` for a non-core break;
   `low` for something cosmetic that still failed a check.
 
-- **`area`** — one of `MISSION.md`'s capability areas, so triage can place it.
+- **`area`** -- one of `MISSION.md`'s capability areas, so triage can place it.
 
 ## Two rules about scope
 

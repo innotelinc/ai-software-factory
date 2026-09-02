@@ -18,14 +18,14 @@ Two adjustments for running it interactively rather than as a workflow node:
    `gh issue view <n>`, and anything a previous step wrote is wherever you put it.
 2. **The line telling you to defer to a `piv-*` skill is for the workflow node, not
    for you.** If this repository has that skill, running it is still the better
-   answer. If it does not, work the shape in the file — which is what the node does.
+   answer. If it does not, work the shape in the file -- which is what the node does.
 
 Everything else applies unchanged: the same inputs, the same output, the same
 refusals. That is the point of pointing at one file instead of keeping two.
 
 ## Why the factory and you read the same prompt
 
-The node prompts are the personalisation layer — they are meant to be rewritten into
+The node prompts are the personalisation layer -- they are meant to be rewritten into
 your process. If the interactive version were a copy, rewriting one would silently
 leave the other saying something else, and the difference would first show up as an
 unattended run doing something you thought you had changed.

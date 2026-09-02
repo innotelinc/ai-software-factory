@@ -69,7 +69,8 @@
   "http": {
     "start": "python -m app.server --port {port}",
     "health_path": "/health",
-    "health_contains": "\"status\":\"ok\"",
+    "_health_contains": "A SUBSTRING OF THE RAW BODY, matched literally. The shipped default used to be {\"status\":\"ok\"} with no space, which does not appear in what json.dumps actually writes -- so the example app never came up, and the driver reported 'never became healthy' while printing a 200 and a healthy body. Keep it short and quote it the way YOUR app serialises. Empty means 200 alone is enough.",
+    "health_contains": "ok",
     "boot_timeout_s": 45,
     "_env": "Optional extra environment for the app process. {port} is substituted.",
     "env": {}

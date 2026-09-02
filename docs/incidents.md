@@ -18,12 +18,12 @@ here is a scar.
 **What happened.** After an unattended merge, `git status` in the main checkout showed
 the merged work as **staged deletions**. The index and the working tree still held the
 commit *before* the merge, while `HEAD` had moved to the merge itself. Any `git commit`
-in that state — by a human, for any reason — commits a revert of what just landed.
+in that state -- by a human, for any reason -- commits a revert of what just landed.
 
 It did. A `git add -A && git commit` 74 seconds after a merge wiped a feature and 106
 lines of its tests. The push succeeded. Nothing failed. I diagnosed it as my own bad
 habit, wrote it up that way, and only found the real cause when the *same desync*
-appeared after the next merge — with my hands nowhere near it.
+appeared after the next merge -- with my hands nowhere near it.
 
 **The cause.**
 
@@ -35,7 +35,7 @@ else:                       git("update-ref", "refs/heads/main", "origin/main")
 `update-ref` moves a branch pointer and touches neither the index nor the working tree.
 When nothing has that branch checked out, that is exactly right. **The main checkout
 always has the base branch checked out.** And `merge.py` runs from a validation
-worktree, where the current branch is the validation branch — so the `else` was taken
+worktree, where the current branch is the validation branch -- so the `else` was taken
 on *every* merge, and the safe branch above essentially never ran.
 
 **The rule.** Ask who has the branch checked out (`git worktree list --porcelain`,
@@ -53,12 +53,12 @@ of this blamed `git add -A` and shipped a doctor check for a stale checkout. Tha
 is worth having, but it was treating a symptom, and it would have gone on treating it.
 
 Second: unknown takes the safe path. If the worktree list cannot be read,
-`worktree_holding` returns the main checkout rather than `""` — because being wrong
+`worktree_holding` returns the main checkout rather than `""` -- because being wrong
 that way prints a note, and being wrong the other way silently arms a revert.
 
 
 
-These are from the build itself — the first laps against a real repository, a real
+These are from the build itself -- the first laps against a real repository, a real
 GitHub, and a real workflow engine.
 
 ### The node that was blamed for a bug two nodes upstream
@@ -71,11 +71,11 @@ is not a JSON object
 ```
 
 `preflight` had run, done its job correctly, and exited 0. It also printed one
-friendly line — `PREFLIGHT_OK secrets_ignored=4` — before its JSON payload, which
+friendly line -- `PREFLIGHT_OK secrets_ignored=4` -- before its JSON payload, which
 made the payload unparseable. The error surfaced on the *consumer*, so the first place
 anyone looks is the file that is not broken.
 
-**What made it worse.** The obvious fix — rewrite every `print()` in `preflight.py` —
+**What made it worse.** The obvious fix -- rewrite every `print()` in `preflight.py` --
 did not work, and the reason is the interesting half: **the polluting line was not in
 the script.** It came from `guard.preflight()`, a library function doing exactly the
 right thing, printing a marker the gate greps when the guard runs as a CLI. Two
@@ -97,7 +97,7 @@ untouched. Two rounds of a genuine fix were lost to a copy that said it had work
 
 **The rule.** `bin/sync-to.py` compares content, copies only what differs, and prints
 what it changed. A sync that did nothing says so. Never trust a copy you did not
-verify — especially the one that carries a fix into the place the fix is needed.
+verify -- especially the one that carries a fix into the place the fix is needed.
 
 ### The mutation that escaped, and the property that was too weak
 
@@ -110,14 +110,14 @@ property that holds for any *subset*, so a check that only asserts the property 
 see work disappearing.
 
 **The rule.** The holdout asserts the exact hand-computed figures, not the property.
-Numbers derived independently, on paper, from the inputs — which is what makes it a
+Numbers derived independently, on paper, from the inputs -- which is what makes it a
 specification rather than a mirror of the implementation. And the mutation runner is
 what found it: no amount of reading those assertions would have.
 
 ### Every rung green, one rung never shown to fail
 
 **What happened.** The first complete mutation set scored 10/10 with six defects caught
-`by unit`, one `by holdout`, one at app start — and **zero by the end-to-end rung.**
+`by unit`, one `by holdout`, one at app start -- and **zero by the end-to-end rung.**
 The number read as "the gate can fail". All it meant was "the unit suite can fail".
 
 `ci.py` stops at the first red rung, so a defect that any earlier rung also catches
@@ -130,7 +130,7 @@ added aimed only at HTTP status semantics, which no unit test goes near.
 
 ### The gap that was stated instead of faked
 
-Tally has a screen, and its mutation set has no *presentation* defect — a colour that
+Tally has a screen, and its mutation set has no *presentation* defect -- a colour that
 stops tracking state, an element that stays visible, a width pinned rather than
 derived.
 
@@ -154,12 +154,12 @@ a temp path, which explains nothing about connection lifetimes.
 ### The suite that could not run where it had to run
 
 **What happened.** The global Python had a broken plugin registered with pytest, so
-`python -m pytest` failed at import — in a repository with no pytest dependency of its
+`python -m pytest` failed at import -- in a repository with no pytest dependency of its
 own.
 
 The deeper problem was the one that decided the design: **the mutation runner copies
 the project into a throwaway directory and runs the whole gate there with nothing but
-the interpreter.** A suite that needs a project virtualenv cannot run in that copy —
+the interpreter.** A suite that needs a project virtualenv cannot run in that copy --
 and a mutation that could not run gets reported as a defect that escaped, which is the
 most misleading number this system can produce.
 
@@ -182,19 +182,19 @@ ESCALATE gh:issue:6: left in 'in-progress' with no PR record and no run holding 
 The lap had not died. It ran for another twenty minutes and finished.
 
 **The cause.** A detached run outlives the process that launched it, so the lock it
-holds cannot be released by that process, and its PID proves nothing — it exits
+holds cannot be released by that process, and its PID proves nothing -- it exits
 immediately. `release_settled_locks()` therefore asked the engine what was still
 running and matched the answer against each lock. It matched on **branch name**, and
 the engine populates no branch in that payload. Every entry came back blank, the
 blanks were filtered out as junk, and each lock was compared against an empty set.
-`any()` over an empty set is `False`, so the conclusion was "no run holds this" — for
+`any()` over an empty set is `False`, so the conclusion was "no run holds this" -- for
 every lock, one tick after it was taken, unconditionally.
 
 The reconcile sweep then did its job perfectly on a false premise: an item
 `in-progress`, no PR, no lock. That is exactly what a died lap looks like.
 
 Worth noticing what this cost *before* it was understood: it also produced
-`could not move gh:pr:5 to 'validating'` earlier in the same build — two validations
+`could not move gh:pr:5 to 'validating'` earlier in the same build -- two validations
 racing for one PR, because the lock meant to stop that had already been dropped. One
 bug, two symptoms, and neither of them looked like a locking problem.
 
@@ -233,7 +233,7 @@ Auto-merge is held because: ratchet slack (unit_tests+10); 63 recorded assumptio
 It was merged forty-five seconds after that comment was posted.
 
 **The cause.** The hold was a sentence. `gate.py` computed `automerge = False`,
-composed a careful explanation, posted it — and then set the PR's state to `passed`,
+composed a careful explanation, posted it -- and then set the PR's state to `passed`,
 because that is what a PR that passed every check is called. The dispatcher reads
 states, not prose. `passed` is exactly what it merges.
 
@@ -246,14 +246,14 @@ human was driving the workflows by hand. The hold was never once put in front of
 running dispatcher until the factory was left alone.
 
 **The rule.** A hold is a **state**, not a message. `held` has its own label, is
-reachable only from `validating`, and leaves only through `open` — which no node may
+reachable only from `validating`, and leaves only through `open` -- which no node may
 do, so a human raising the floor or accepting the assumptions is the single way
 forward. `next_action` has no branch for it, so the factory carries on with other work
 and the PR waits, which is the whole intent: a hold does not stop the factory, it stops
 that merge.
 
 And it gets its own line in `factory status`. A hold is the one outcome that is
-neither a failure nor an escalation — nothing is wrong — which makes it the easiest
+neither a failure nor an escalation -- nothing is wrong -- which makes it the easiest
 thing in the system to never look at.
 
 ### Two laps for one issue, stopped by a lock that happened to still be held
@@ -269,19 +269,19 @@ That is the issue PR #13 was for. A second implement lap started, on a second br
 for work that was already built and waiting on a person.
 
 **Why it only nearly happened.** The validation's lock was still held, so the duplicate
-could not take a slot on the tick I was watching — and then it did, one tick later,
+could not take a slot on the tick I was watching -- and then it did, one tick later,
 once that lock cleared. The run was live for 58 seconds before I cancelled it. The
 thing that "prevented" it the first time was a lock timing coincidence, which is luck
 rather than a mechanism.
 
 **The cause.** `next_action` selects an issue on its label alone, and `accepted` is
-reachable while a PR for that issue is open — a person accepting an issue somebody
+reachable while a PR for that issue is open -- a person accepting an issue somebody
 already built, or an issue walked back from `in-progress` after its PR opened. The
 reconcile sweep already asks exactly this question about `in-progress` issues, using
 `linked_issue`. The selection path did not ask it at all, so the two disagreed.
 
 **The rule.** An issue that a live pull request already answers is not work. Same
-question, same helper, both places — and once that PR is merged or rejected, the issue
+question, same helper, both places -- and once that PR is merged or rejected, the issue
 is selectable again, which the self-test checks in both directions, because a filter
 that is too broad strands the issue instead of duplicating it.
 
@@ -294,7 +294,7 @@ if rc_fetch == 0 and rc_count == 0 and behind > 0:  ...stale...
 else:                                               ...OK, "level with origin/main"...
 ```
 
-A failed fetch — offline, no remote, a branch that does not exist — took the `else`.
+A failed fetch -- offline, no remote, a branch that does not exist -- took the `else`.
 It printed **"checkout is current"** about a tree it had not compared to anything.
 
 **Why this one is worth its own entry.** It is the exact failure this entire system is
@@ -310,16 +310,16 @@ the language will happily let you write only two.
 ### The default branch that was assumed, in a product whose pitch is "install it into your repo"
 
 **What happened.** `main` was a string literal in a dozen places across the merge and
-the deploy poller — `base = "origin/main"`, and a merge that refused any pull request
+the deploy poller -- `base = "origin/main"`, and a merge that refused any pull request
 whose base was not literally `"main"`.
 
 On a repository using `master`, or `develop`, or a release branch, this installs
-cleanly, the doctor goes green, laps run, pull requests open — and every merge is
+cleanly, the doctor goes green, laps run, pull requests open -- and every merge is
 refused, forever, for a reason that reads like a configuration mistake. That is the
 worst shape a bug can take in something sold as "install it into your repo".
 
-**The rule.** `config.BASE_BRANCH`, read from `origin/HEAD` — what the remote itself
-says its default is, which is the only answer that is not a guess — with
+**The rule.** `config.BASE_BRANCH`, read from `origin/HEAD` -- what the remote itself
+says its default is, which is the only answer that is not a guess -- with
 `FACTORY_BASE_BRANCH` to override and `main`/`master` probes as fallbacks. `bin/audit.py`
 fails on a bare `'main'` literal anywhere in the machinery.
 
@@ -333,7 +333,7 @@ AttributeError: module 'config' has no attribute 'BASE_BRANCH'
 ```
 
 **The cause, and it is structural.** `factory/config.py` is on the sync's NEVER list
-*because* it is the one file you edit — every project-specific value lives there and
+*because* it is the one file you edit -- every project-specific value lives there and
 overwriting it would throw them away. The consequence is not obvious until it bites: a
 new setting can never reach an existing install, and the synced code that reads it
 raises at runtime, on whatever path happens to touch it first.
@@ -343,7 +343,7 @@ settings that are missing, with the code that defines them, for the operator to 
 The file stays theirs; it is no longer allowed to be silently incomplete.
 
 **And report what a setting DEPENDS on.** The first version listed
-`BASE_BRANCH = _base_branch()` and nothing else — an instruction to paste a line into a
+`BASE_BRANCH = _base_branch()` and nothing else -- an instruction to paste a line into a
 file with no `_base_branch` in it, turning an AttributeError into a NameError. A
 setting is not portable without whatever computes it.
 
@@ -353,18 +353,18 @@ setting is not portable without whatever computes it.
 task, and the doctor reported `trigger armed: scheduled`. Everything agreed the factory
 was running.
 
-The **regression was never scheduled.** The cron backend installs two entries — the
+The **regression was never scheduled.** The cron backend installs two entries -- the
 dispatcher every thirty minutes and the weekly re-test of what already merged. The Task
 Scheduler backend installed one, and returned success.
 
 **So a Windows factory could be fully armed, fully green, and never once re-test its own
-merged code** — the component whose entire job is noticing that something that used to
+merged code** -- the component whose entire job is noticing that something that used to
 work stopped working simply was not there. And nothing reports a job that was never
 created, so the only symptom is bugs not being found, which is indistinguishable from
 there being none.
 
 This is the "a fully built factory with nothing scheduled audits identically to a
-running one" failure that the trigger check exists to prevent — reproduced one level
+running one" failure that the trigger check exists to prevent -- reproduced one level
 down, inside the thing that installs the trigger.
 
 **The rule.** Both backends install both jobs, `remove()` deletes both, and
@@ -372,7 +372,7 @@ down, inside the thing that installs the trigger.
 find at runtime.
 
 **A note on how the check itself first failed.** It grepped the raw function text for
-the regression, and a build with the call *deleted* still passed — the comment above
+the regression, and a build with the call *deleted* still passed -- the comment above
 the call explained what it was for, and the grep matched the explanation. A check that
 its own rationale satisfies is a check that cannot fail. It now reads the code with
 comments and docstrings stripped, which is the same repair the lock-liveness check
@@ -382,19 +382,19 @@ needed, for the same reason.
 
 **What happened.** Two dispatcher loops ran against the same repository for
 forty-five minutes, because an earlier one was never stopped. Every unit of work was
-dispatched exactly once — triage, validation and the merge by one loop, the
+dispatched exactly once -- triage, validation and the merge by one loop, the
 implementation by the other, no duplicates and no overlap.
 
 **Why it is worth writing down.** The O_EXCL lock exists for precisely this, and
 nothing had ever tested it. `acquire()` uses `O_CREAT | O_EXCL` rather than
 `if not exists: write` because the latter is a time-of-check-to-time-of-use race that
-is entirely reachable — a tick that outlives the cron interval, or a human running the
+is entirely reachable -- a tick that outlives the cron interval, or a human running the
 dispatcher while the schedule fires. That argument was sound and completely
 unevidenced until two loops collided by mistake.
 
 **The lesson is about the evidence, not the lock.** Every other guarantee in this
 system was tested by deliberately breaking something. This one was tested by an
-accident, which is the only reason it has any evidence at all — and it is worth asking,
+accident, which is the only reason it has any evidence at all -- and it is worth asking,
 of every remaining "this cannot happen because", whether anything has ever made it try.
 
 ### The closing keyword that was formatted as code
@@ -402,7 +402,7 @@ of every remaining "this cannot happen because", whether anything has ever made 
 **What happened.** A lap finished perfectly: PR merged, issue labelled `factory:done`.
 The issue was still **open**.
 
-**The cause.** The PR body said `` `Fixes #10` `` — with backticks. GitHub does not
+**The cause.** The PR body said `` `Fixes #10` `` -- with backticks. GitHub does not
 treat a linkage keyword inside a code span as a closing reference, so it did nothing.
 The previous PR had written `Fixes #8.` in plain prose and closed correctly.
 
@@ -416,20 +416,20 @@ what does the work.
 
 **The general shape**, and it is the third time it appears in this list: a load-bearing
 step delegated to prose. The judge's verdict thrown away over an enum, the hold written
-as a comment, and now the close written as a keyword — each time the mechanism was a
+as a comment, and now the close written as a keyword -- each time the mechanism was a
 sentence, and each time the failure looked like success.
 
 ### The reaper whose docstring explained why it was safe, in a system where that was false
 
 **What happened.** With the lock-release path fixed, an implement lap was escalated as
-dead again — at 5 minutes 39 seconds, while it was running, and it ran on to open a
+dead again -- at 5 minutes 39 seconds, while it was running, and it ran on to open a
 pull request. This time the run list was answering correctly: it said `running`. The
 lock was gone anyway.
 
 **The cause.** The *other* reaper. `reap_locks()` frees a lock when "the owning process
 is gone AND the lock is older than GRACE", and its docstring said:
 
-> A live long lap is never touched, because its PID is alive — that is the check that
+> A live long lap is never touched, because its PID is alive -- that is the check that
 > matters, and age is only the fallback for when the PID cannot be read.
 
 **That sentence is false for every dispatch this system makes.** Dispatch is detached:
@@ -440,12 +440,12 @@ and the reaper, and almost every implement lap is longer than five minutes.
 
 **The rule.** The pid on the lock is the *dispatching* process, not the run. It is
 meaningful for exactly one case: a lock that names **no run**, meaning the dispatch
-died before it could record one — there the pid is the only owner there ever was. A
+died before it could record one -- there the pid is the only owner there ever was. A
 lock that names a run is freed by evidence about *that run*, or by the long stale cap,
 which is the backstop for an engine that can no longer be asked.
 
 **The general one is about the comment, not the code.** A docstring asserting the
-property that makes something safe is worth more than most tests — right up until the
+property that makes something safe is worth more than most tests -- right up until the
 system changes underneath it and nothing re-reads it. This one described a foreground
 dispatch. The code had been detached for a long time.
 
@@ -455,7 +455,7 @@ dispatch. The code had been detached for a long time.
 alive. It had no test. Every check in this repository pointed at the product: the
 harness proves the software works, the mutation set proves the harness can fail, the
 doctor proves the factory was given what it needs. Nothing proved the **factory's own
-parts behave as written** — and a dispatcher that mis-decides which laps are alive
+parts behave as written** -- and a dispatcher that mis-decides which laps are alive
 produces a repository that looks exactly like a quiet one.
 
 **The rule.** `factory/_selftest.py`, run by the doctor on every audit. Fast, offline,
@@ -464,7 +464,7 @@ operation: an empty run list keeps a lock, an unrecognised status keeps a lock,
 `needs-human` is terminal, `passed` does not lead back to `validating`, an empty log
 yields no counts, and every state that is not defined by absence has a label.
 
-It was mutation-tested the same day it was written — the original defect was injected
+It was mutation-tested the same day it was written -- the original defect was injected
 into a throwaway copy and the self-test went red, which is the only reason to believe
 any of it can fail at all.
 
@@ -484,7 +484,7 @@ for a reason that had nothing to do with the code under test.
 **Two causes, and both had to be fixed.**
 
 The enforcement lived in `state.py`'s **command line wrapper**. Eleven callers import
-`set_state` and call the function directly — the gate, the merge, the dispatcher — and
+`set_state` and call the function directly -- the gate, the merge, the dispatcher -- and
 every one of them was governed by nothing. The guarantee was opt-in and read as
 absolute.
 
@@ -493,7 +493,7 @@ its work**. The escalation happened after that read. No table can fix a decision
 from data that predates the write.
 
 **The rule.** Enforce at the write. `set_state` fetches at the moment it writes, which
-is the latest anything can know, and refuses there — so the wrapper and the eleven
+is the latest anything can know, and refuses there -- so the wrapper and the eleven
 importers get the same answer. `force=True` exists for exactly one thing: parking at
 `needs-human`, which must be allowed from anywhere, because an escalation a table
 lookup can block is not an escalation.
@@ -501,12 +501,12 @@ lookup can block is not an escalation.
 **And the dispatcher must not dispatch what it just escalated.** GitHub does not
 promise you read your own write. A tick escalated a PR at 19:21:55 and re-dispatched it
 at 19:22:03, eight seconds later, straight back into the state a human had just been
-told to look at. `escalate()` now returns every target it parked — the linked issue
-included — and the tick excludes them.
+told to look at. `escalate()` now returns every target it parked -- the linked issue
+included -- and the tick excludes them.
 
 ### The judge that was thrown away for a word
 
-**What happened.** `error_max_structured_output_retries` — five attempts, fifty-two
+**What happened.** `error_max_structured_output_retries` -- five attempts, fifty-two
 seconds of judging, and the run died. `apply` binds to `$judge.output`, a binding never
 falls back to `if_skipped` for a *failed* producer, so the one node whose job is to
 report an infrastructure failure could not run. A live worktree left behind, a human
@@ -515,7 +515,7 @@ paged, and no record of what the judge actually said.
 **The rule.** **Constrain only what is branched on.** `factory/gate.py` reads exactly
 one field to decide anything: `verdict`. `severity` and `category` reach the PR comment
 through `f.get('severity', '?')` and change nothing. Every enum on a field nobody
-branches on is a fresh chance *per finding* to fail the whole run for a synonym — eight
+branches on is a fresh chance *per finding* to fail the whole run for a synonym -- eight
 of them on a five-finding review. The vocabulary belongs in the prompt, where being off
 it costs a slightly worse comment instead of a dead validation.
 
@@ -576,7 +576,7 @@ What reached the filer was `@-`.
 The reasoning had been assembled in a shell pipeline instead of going through the
 comment helper, and on Windows the pipeline collapsed. Every state transition was
 right. The call exited 0. The run reported success. The only thing lost was the entire
-explanation — the part a human was ever going to read.
+explanation -- the part a human was ever going to read.
 
 **The rule.** Every human-facing write goes through one helper, and the helper reads it
 back. `exit 0` from the tool that posted a verdict proves the API call succeeded, not
@@ -592,13 +592,13 @@ Driving the same lap by hand had hidden it completely, because **a human commits
 without being told to.**
 
 **The rule.** The commit is a node, and it asserts on the artifact rather than the exit
-code. An empty diff fails the lap loudly, with any tool denials attached — because a
+code. An empty diff fails the lap loudly, with any tool denials attached -- because a
 denial is the usual cause and correlating them an hour later in a log is not a process.
 
 ### The fix loop that could not be reached
 
-One wrong arrow in the transition table — `failed → validating` instead of
-`failed → open` — made the entire fix loop unreachable. The fix committed, the illegal
+One wrong arrow in the transition table -- `failed → validating` instead of
+`failed → open` -- made the entire fix loop unreachable. The fix committed, the illegal
 transition returned non-zero, the workflow died on that line, and no escalation ran.
 The PR sat in `validating`, which the dispatcher does not look at, so it answered
 `idle` from then on.
@@ -621,7 +621,7 @@ workflow, and prefer a spend ceiling to a turn ceiling regardless.
 ### The lock that outlived its owner
 
 The dispatch lock is released when the run finishes. It is not released when the
-process is *killed* — a reboot, a sleeping machine, a closed terminal, the OOM killer.
+process is *killed* -- a reboot, a sleeping machine, a closed terminal, the OOM killer.
 The lock file survived, counted toward capacity forever, and every later tick logged
 `at capacity (1/1), nothing dispatched` and exited 0.
 
@@ -635,13 +635,13 @@ check that gets it wrong kills a running lap.
 failed to list it, so a network blip reads as "carry on".
 
 **The rule.** The stop button is a label you ADD, any error reading it counts as
-stopped, and there is a local kill file too — because the local one works with the
+stopped, and there is a local kill file too -- because the local one works with the
 network down, which is when you most want it.
 
 ### The three-dot diff
 
 `git diff main` compares two *tips*, so a branch cut before main moved reports main's
-later commits as this branch's work — and main's later commits routinely touch the
+later commits as this branch's work -- and main's later commits routinely touch the
 protected paths. Every such branch was auto-rejected for files it never went near: a
 false positive in the most severe gate there is, firing more often the longer a branch
 lives.
@@ -650,7 +650,7 @@ lives.
 
 ### The escalation that took the success path
 
-A triage run correctly decided `needs-human`, wrote the ledger line, and stopped —
+A triage run correctly decided `needs-human`, wrote the ledger line, and stopped --
 because the notifier was only reached from the *failure* path, and a correct
 escalation is not a failure.
 
@@ -1013,3 +1013,65 @@ it, which is what finally showed the delivery was not happening.
 **The rule.** When a component reports its own success, the test must observe the
 EFFECT somewhere else. `exit 0` is a claim, and for anything that crosses a network it
 is a claim about the local end only.
+
+## Both end-to-end rungs were deleted and every check stayed green
+
+Found while moving the journeys from Python to markdown, by doing the move and then
+running everything before writing the replacements.
+
+`harness/e2e.py` and `.factory/holdout/run.py` were deleted outright. Then:
+
+```
+python template/factory/_selftest.py   ->  SELFTEST_PASSED checks=197
+python bin/audit.py                    ->  No findings. 0 failing, 0 warnings
+```
+
+Both green, with the gate's end-to-end rung and its entire independence line gone.
+
+**Why neither saw it.** The self-test pins the machinery that decides a verdict: the
+lock, the state machine, the ratchet, the markers. The auditor pins cross-file
+invariants about that machinery. Both of them check the thing that reads the evidence.
+Neither checked that anything still PRODUCES the evidence, so the rungs were outside
+the reach of every instrument aimed at the gate.
+
+It would not have surfaced at the next gate run either, because a rung that does not
+exist prints `HOLDOUT_ABSENT` and continues. That branch is correct on a fresh install
+and indistinguishable from this.
+
+**The fix** is `check_agent_rungs_wired` in `bin/audit.py`, and it makes three separate
+claims rather than one: the files exist, `ci.py` actually calls them, and the holdout
+spec is inside the directory every builder node is denied. The third is the one worth
+having. Moving those scenarios under `harness/` would leave every other check green
+while quietly ending the independence the auto-merge rests on. All six mutations of it
+were watched going red before it was believed.
+
+**The rule.** An instrument aimed at "does the checker work" does not cover "is the
+checker still plugged in". Assert the presence and the wiring of every rung
+separately, because absence is the one failure that produces no output to inspect.
+
+## Two guards that made each other invisible
+
+The agent-driven rungs validate the report before counting it, and two of those
+checks reject an empty report: `if not groups` and `if assertions == 0`. A mutation
+removing either one left the self-test green, and both showed up as ESCAPED.
+
+Neither guard was broken. The tests were: they asked whether `_validate` raised, and
+with either guard removed the other one still raised. Redundant protection reads as
+tested protection when the check is only "did it refuse".
+
+Two different fixes, because the two cases are not the same:
+
+- `if not groups` is genuinely reachable, so the test now asserts WHICH guard fired by
+  matching the message. Delete the guard and the rejection still happens, with a
+  different reason, and the check goes red.
+- `if assertions == 0` is provably unreachable, since every group is already required
+  to carry at least one assertion. It is kept as a backstop for whoever loosens the
+  guard above it, and it is now marked NOT_APPLICABLE in the mutation set by name. A
+  set that quietly drops the defects it cannot catch is a set whose score means
+  nothing.
+
+**And one more thing the same run showed.** The mutation for "observed may simply echo
+expected" first used a partial anchor, which left an unbalanced parenthesis. It
+reported CAUGHT, because the interpreter refused the file before the check it was
+aimed at ever ran. A mutation that breaks the syntax measures the parser. Anchor on the
+whole line.

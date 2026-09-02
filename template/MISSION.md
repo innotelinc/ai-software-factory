@@ -43,7 +43,7 @@ The factory may accept issues in these areas.
 **<Capability area>**
 - <specific capability>
 
-## Out of scope — the factory must never build this
+## Out of scope -- the factory must never build this
 
 <!--
   THE SECTION THAT EARNS ITS KEEP. This is how an agent recognises that a plausible,
@@ -67,7 +67,7 @@ The factory may accept issues in these areas.
 **<Category>**
 - <thing>
 
-## Hard invariants — not tunable by any issue
+## Hard invariants -- not tunable by any issue
 
 These are not features. They are properties that define what <PRODUCT> is. The
 factory cannot modify them even if an issue asks nicely, gives a good reason, or
@@ -94,12 +94,12 @@ Explicitly in scope, so the factory does not reject them as architectural drift:
 
 Every change the factory ships clears all three gates.
 
-**Gate 1 — static checks and tests pass.** <the exact commands>
+**Gate 1 -- static checks and tests pass.** <the exact commands>
 
-**Gate 2 — <the product-level quality bar>.** <e.g. any new user-facing feature is
+**Gate 2 -- <the product-level quality bar>.** <e.g. any new user-facing feature is
 usable without documentation.>
 
-**Gate 3 — the end-to-end path passes as a real user.**
+**Gate 3 -- the end-to-end path passes as a real user.**
 
 1. <start the app>
 2. <the first user action>
@@ -109,7 +109,7 @@ usable without documentation.>
 This runs on every change that touches runnable code, including ones that "seem
 unrelated". It is not optional.
 
-## Open questions — decisions nobody has made yet
+## Open questions -- decisions nobody has made yet
 
 <!--
   WORD THIS CAREFULLY, because the obvious wording breaks the factory.
@@ -125,13 +125,13 @@ unrelated". It is not optional.
 -->
 
 These are undecided, not forbidden. **The factory may propose an answer to any of
-them**, build against it, and record what it assumed — the merge is then held for a
+them**, build against it, and record what it assumed -- the merge is then held for a
 human, so nothing ships on a guess and nothing stops for one.
 
 - **Q1** <the question, phrased as a decision rather than a topic>
 - **Q2** <...>
 
-**Except these, which do stop the factory** — they are on the irreversible list
+**Except these, which do stop the factory** -- they are on the irreversible list
 (`FACTORY_RULES.md` §7.3) rather than open in the ordinary sense:
 
 - <the one about identity, auth, or who may act as whom>
@@ -140,7 +140,7 @@ human, so nothing ships on a guess and nothing stops for one.
 Once answered, an entry moves to `.factory/decisions.md` with its answer and date,
 and stops being asked. **A decision is asked once.**
 
-## What the factory does NOT own — permanently human
+## What the factory does NOT own -- permanently human
 
 <!--
   THE FACTORY'S SCOPE IS SMALLER THAN THE PRODUCT'S, and saying so here is what stops
@@ -151,9 +151,9 @@ and stops being asked. **A decision is asked once.**
   work, and it stays with a person.
 -->
 
-- <does it FEEL right — weight, pacing, difficulty, tone>
-- <does it LOOK right — layout, hierarchy, whether two states read as different>
-- <is it UNDERSTANDABLE — can a first-time user work it out without being told>
+- <does it FEEL right -- weight, pacing, difficulty, tone>
+- <does it LOOK right -- layout, hierarchy, whether two states read as different>
+- <is it UNDERSTANDABLE -- can a first-time user work it out without being told>
 
 The factory owns <the domain rules · the data model · the simulation>: the layer
 whose correctness can be asserted. That is usually where most of the risk lives, and

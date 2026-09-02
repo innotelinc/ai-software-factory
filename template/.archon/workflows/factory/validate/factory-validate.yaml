@@ -9,7 +9,7 @@ description: |
   (factory-fix), or the scheduled regression (factory-regress).
 
   =====================================================================
-  THE HOLDOUT — the one design constraint everything else serves
+  THE HOLDOUT -- the one design constraint everything else serves
   =====================================================================
 
   The validator must NEVER see the builder's plan, notes, or reasoning. It judges
