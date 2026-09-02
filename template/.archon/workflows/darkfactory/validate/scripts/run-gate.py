@@ -173,13 +173,16 @@ if guard_rc != 0:
     issue = None
     try:
         issue = state.linked_issue(target)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        print(f"ESCALATION_ISSUE_UNKNOWN {target}: {e}. The PR is parked; the issue "
+              f"behind it was not, and may sit in-progress with nothing working on it.",
+              file=sys.stderr)
     if issue:
         try:
             state.main(["set", issue, "state=needs-human"])
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            print(f"ESCALATION_LABEL_FAILED {issue}: {e}. Recorded in needs-human.md, "
+                  f"but the label did not change.", file=sys.stderr)
     config.NEEDS_HUMAN.parent.mkdir(parents=True, exist_ok=True)
     with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:
         fh.write(

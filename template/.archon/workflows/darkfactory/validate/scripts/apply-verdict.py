@@ -60,8 +60,14 @@ def infra_failure(reason: str) -> None:
 
     try:
         state.main(["set", target, "state=needs-human"])
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        # LOUD. This label IS the state machine: if it does not stick the item keeps its
+        # old state, the dispatcher re-selects it next tick, and an escalation that
+        # looked successful becomes a loop. needs-human.md is written either way, so
+        # silence here left the only evidence pointing at a successful park.
+        print(f"ESCALATION_LABEL_FAILED {target}: {e}. Recorded in needs-human.md, but "
+              f"the label did not change -- the dispatcher may re-select this.",
+              file=sys.stderr)
     config.NEEDS_HUMAN.parent.mkdir(parents=True, exist_ok=True)
     with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:
         fh.write(
