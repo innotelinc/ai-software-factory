@@ -1,4 +1,4 @@
-"""The deterministic audit. `darkfactory doctor` runs this.
+"""The deterministic audit. `factory doctor` runs this.
 
     python factory/doctor.py            report
     python factory/doctor.py --level 3  can this repo run at level 3?
@@ -120,7 +120,7 @@ def main(argv: list[str]) -> int:
             out = ""
         r.add(OK, "archon", out or "installed")
     else:
-        r.add(FAIL, "archon", f"{config.ARCHON_BIN} not on PATH -- run `darkfactory init`", 1)
+        r.add(FAIL, "archon", f"{config.ARCHON_BIN} not on PATH -- run `factory init`", 1)
 
     if shutil.which("gh"):
         rc, _ = 0, ""
@@ -282,11 +282,11 @@ def main(argv: list[str]) -> int:
           "" if rc == 0 else "builder artifacts would be committed")
 
     # --- the workflow pack ---------------------------------------------------
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     found = sorted(p.stem for p in pack.rglob("*.yaml")) if pack.exists() else []
     expected = {
-        "darkfactory-triage", "darkfactory-implement", "darkfactory-validate",
-        "darkfactory-fix", "darkfactory-regress",
+        "factory-triage", "factory-implement", "factory-validate",
+        "factory-fix", "factory-regress",
     }
     missing_wf = sorted(expected - set(found))
     r.add(OK if not missing_wf else FAIL, "workflow pack",
@@ -406,7 +406,7 @@ def main(argv: list[str]) -> int:
     if held_prs:
         r.add(WARN, "held for you",
               " ".join(held_prs) + " -- green and waiting for you to agree "
-              "(`darkfactory accept <target>`)")
+              "(`factory accept <target>`)")
 
     # --- the stop button ------------------------------------------------------
     r.add(OK, "stop button", f"{config.STOP_FILE.name} + the {config.STOP_LABEL} label")

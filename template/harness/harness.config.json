@@ -66,7 +66,7 @@
   },
 
   "browser": {
-    "_note": "ONLY for an app whose correctness is visual. Leave install_check empty if e2e.py never drives a browser. When it is set, `darkfactory doctor` runs it at setup -- so a missing browser is a setup failure with an install command, not a mystery hang at gate time on a fresh runner.",
+    "_note": "ONLY for an app whose correctness is visual. Leave install_check empty if e2e.py never drives a browser. When it is set, `factory doctor` runs it at setup -- so a missing browser is a setup failure with an install command, not a mystery hang at gate time on a fresh runner.",
     "install_check": "",
     "install_hint": "npm i -g agent-browser && agent-browser install   |   pip install playwright && playwright install chromium"
   }

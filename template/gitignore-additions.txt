@@ -1,4 +1,4 @@
-# Appended to your .gitignore by `darkfactory init`.
+# Appended to your .gitignore by `factory init`.
 
 # THE FACTORY'S OWN BYTECODE. Every factory script is Python, and running one inside a
 # worktree writes `factory/__pycache__/*.pyc` -- inside `factory/`, which is on the
@@ -10,7 +10,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# darkfactory: runtime state, never committed
+# factory: runtime state, never committed
 .factory/runs/
 .factory/ledger.jsonl
 .factory/locks-runtime/

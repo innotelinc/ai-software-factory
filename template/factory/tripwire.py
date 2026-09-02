@@ -21,7 +21,7 @@ WHAT COUNTS AS AN ARTIFACT, and why the obvious answer is wrong
 
 The first version of this matched on filename alone -- `**/plan.md`,
 `**/investigation.md` -- and it fired on the very first real validation, against
-`.archon/workflows/darkfactory/implement/commands/plan.md`.
+`.archon/workflows/factory/implement/commands/plan.md`.
 
 That file is the workflow's own PROMPT. It is checked into the repository, it is
 byte-identical in every worktree including main, and it says nothing whatsoever about

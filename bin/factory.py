@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""darkfactory -- turn a repository into one that ships its own code.
+"""factory -- turn a repository into one that ships its own code.
 
-    darkfactory init            install the factory into this repo
-    darkfactory doctor          audit it; refuses a dial the evidence does not support
-    darkfactory tick            one dispatcher pass (what the schedule calls)
-    darkfactory run <wf> <tgt>  dispatch one workflow by hand
-    darkfactory accept <tgt>    agree with a held PR's recorded assumptions
-    darkfactory level [N]       read or set the autonomy dial
-    darkfactory arm | disarm    install or remove the schedule
-    darkfactory halt | resume   the stop button
-    darkfactory status          what is in flight, and what the dial is
+    factory init            install the factory into this repo
+    factory doctor          audit it; refuses a dial the evidence does not support
+    factory tick            one dispatcher pass (what the schedule calls)
+    factory run <wf> <tgt>  dispatch one workflow by hand
+    factory accept <tgt>    agree with a held PR's recorded assumptions
+    factory level [N]       read or set the autonomy dial
+    factory arm | disarm    install or remove the schedule
+    factory halt | resume   the stop button
+    factory status          what is in flight, and what the dial is
 
 THE ENGINE COMES WITH IT. `init` installs Archon if it is not already here, the same
 way installing OpenClaw gets you Pi: you asked for a factory, and the workflow engine
 underneath is an implementation detail you are allowed to ignore until you want it.
 When you do want it, it is a normal Archon install with a normal workflow pack in
-`.archon/workflows/darkfactory/`, and every workflow is a YAML file you can read,
+`.archon/workflows/factory/`, and every workflow is a YAML file you can read,
 edit, and run by hand.
 
 NOTHING HERE IS CLEVER. It copies files, fills in what it can detect, and refuses to
@@ -81,7 +81,7 @@ def repo_root() -> Path:
     if rc != 0:
         die(
             "Not a git repository.\n"
-            "A dark factory keeps its state in git and on GitHub -- branches, labels, "
+            "An AI software factory keeps its state in git and on GitHub -- branches, labels, "
             "pull requests. There is nowhere for it to live here.\n\n"
             "  git init && git remote add origin <url>"
         )
@@ -94,7 +94,7 @@ def repo_root() -> Path:
 def ensure_archon(auto: bool) -> bool:
     """Install Archon if it is not here. The OpenClaw/Pi step.
 
-    A user who wanted a dark factory did not ask to learn a workflow engine. They get
+    A user who wanted a software factory did not ask to learn a workflow engine. They get
     one anyway -- it is what runs every node -- but they should not have to install it
     as a separate errand, and they should not discover it exists via an error message
     forty seconds into the first dispatch.
@@ -224,7 +224,7 @@ def is_greenfield(root: Path) -> bool:
 COPY_PLAN = [
     ("factory", "factory"),
     ("harness", "harness"),
-    (".archon/workflows/darkfactory", ".archon/workflows/darkfactory"),
+    (".archon/workflows/factory", ".archon/workflows/factory"),
     # The interactive half of the same loop. Each skill POINTS AT the workflow's
     # command file rather than restating it, so rewriting a node prompt changes what
     # you get by hand too -- and the two can never quietly disagree. A copy would
@@ -267,7 +267,7 @@ GITIGNORE_LINES = (
 def cmd_init(args: argparse.Namespace) -> int:
     root = repo_root()
     say()
-    say(f"  darkfactory {VERSION}")
+    say(f"  factory {VERSION}")
     say(f"  installing into {root}")
     say()
 
@@ -381,7 +381,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     gi = root / ".gitignore"
     existing = gi.read_text(encoding="utf-8", errors="replace") if gi.exists() else ""
     additions = [ln for ln in GITIGNORE_LINES if ln and not ln.startswith("#") and ln not in existing]
-    if additions or "darkfactory" not in existing:
+    if additions or "factory" not in existing:
         with gi.open("a", encoding="utf-8") as fh:
             fh.write("\n" + "\n".join(GITIGNORE_LINES) + "\n")
         step("~ .gitignore")
@@ -427,9 +427,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     say("  <LIKE THIS>; the doctor will tell you which.")
     say()
     say("  Then, in order:")
-    say("    darkfactory doctor            # it will fail. That is it working.")
-    say("    darkfactory run implement gh:issue:1    # one lap, by hand")
-    say("    darkfactory level 1           # only once a lap has completed")
+    say("    factory doctor            # it will fail. That is it working.")
+    say("    factory run implement gh:issue:1    # one lap, by hand")
+    say("    factory level 1           # only once a lap has completed")
     say()
     if not have_engine:
         warn("Archon is still missing -- nothing will dispatch until it is installed.")
@@ -473,7 +473,7 @@ DECISIONS_SEED = """# Open decisions
 def factory_py(root: Path, name: str, *argv: str) -> int:
     script = root / "factory" / name
     if not script.exists():
-        die(f"{script} is missing. Run `darkfactory init` in this repo first.")
+        die(f"{script} is missing. Run `factory init` in this repo first.")
     return subprocess.run([sys.executable, str(script), *argv], cwd=str(root)).returncode
 
 
@@ -534,7 +534,7 @@ def cmd_level(args: argparse.Namespace) -> int:
             mark = ">" if n == config.AUTONOMY else " "
             say(f"  {mark} {n}  {what}")
         say()
-        say("  Raising it is a deliberate act: `darkfactory level <n>`.")
+        say("  Raising it is a deliberate act: `factory level <n>`.")
         say("  The doctor refuses a level the evidence does not support.")
         return 0
 
@@ -613,7 +613,7 @@ def cmd_halt(args: argparse.Namespace) -> int:
     say("  The remote half is an open issue labelled `factory:stop` -- reachable from")
     say("  a phone, and it fails closed: any error reading it also counts as stopped.")
     say()
-    say("  `darkfactory resume` to lift it.")
+    say("  `factory resume` to lift it.")
     return 0
 
 
@@ -756,7 +756,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         say()
         say(f"  held for you ({len(held)}) -- green, waiting for you to agree:")
         for tgt in held:
-            say(f"    {tgt}  -- read the gate comment, then: darkfactory accept {tgt}")
+            say(f"    {tgt}  -- read the gate comment, then: factory accept {tgt}")
 
     if config.NEEDS_HUMAN.exists():
         lines = [ln for ln in config.NEEDS_HUMAN.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
@@ -770,9 +770,9 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(prog="darkfactory", description=__doc__,
+    p = argparse.ArgumentParser(prog="factory", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--version", action="version", version=f"darkfactory {VERSION}")
+    p.add_argument("--version", action="version", version=f"factory {VERSION}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     a = sub.add_parser("accept", help="agree with a held PR's recorded assumptions")

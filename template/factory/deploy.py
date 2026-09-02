@@ -149,7 +149,7 @@ def main(argv: list[str]) -> int:
         # its CURRENT content, so the build is old code for old files and new code for
         # new ones -- neither version, reported as a successful rollback.
         #
-        # Measured: a rollback to the `darkfactory init` commit, which predates `app/`
+        # Measured: a rollback to the `factory init` commit, which predates `app/`
         # entirely, produced a release still containing the feature being rolled back.
         rc_added, added = run(
             f"git diff --name-only --diff-filter=A {previous} HEAD")

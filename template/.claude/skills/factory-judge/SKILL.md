@@ -6,7 +6,7 @@ argument-hint: the pull request, e.g. `gh:pr:14`
 
 # factory-judge
 
-**The instructions for this step live in `.archon/workflows/darkfactory/validate/commands/judge.md`. Read that file now and follow it.**
+**The instructions for this step live in `.archon/workflows/factory/validate/commands/judge.md`. Read that file now and follow it.**
 This skill exists so you can run the step by hand; it deliberately does not restate
 the content, because a second copy is a second thing to keep true.
 

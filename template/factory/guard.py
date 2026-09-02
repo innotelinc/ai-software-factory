@@ -56,7 +56,7 @@ PROTECTED = [
     "harness/**",
     # The workflow pack. A node that can rewrite its own workflow can remove the
     # node that checks it.
-    ".archon/workflows/darkfactory/**",
+    ".archon/workflows/factory/**",
     # CI, because a required check the factory can edit is not a required check.
     ".github/**",
     # Secrets. Being unable to EDIT one does not stop a broad `git add` from
@@ -71,7 +71,7 @@ PROTECTED = [
 
 # ADD ANYTHING WITH A BLAST RADIUS YOU CANNOT ABSORB. Auth modules, rate-limit
 # constants, payment code, migrations, Dockerfiles, deploy/ and infra/.
-# `darkfactory init` seeds this from what it found in your repo; add the rest.
+# `factory init` seeds this from what it found in your repo; add the rest.
 PROTECTED += [
     # "deploy/**", "infra/**",
     # "Dockerfile", "docker-compose*.yml",

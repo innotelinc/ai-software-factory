@@ -96,7 +96,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 # --- the agent ----------------------------------------------------------------
-# The workflow engine. Installed by `darkfactory init` if it was not already here,
+# The workflow engine. Installed by `factory init` if it was not already here,
 # the same way installing OpenClaw gets you Pi: you asked for the factory, the
 # engine is an implementation detail you are allowed to ignore until you want it.
 ARCHON_BIN = _env("FACTORY_ARCHON_BIN", "archon")
@@ -108,11 +108,11 @@ ARCHON_BIN = _env("FACTORY_ARCHON_BIN", "archon")
 # as the judgement it is answering can inherit the judge's reasoning. A separate
 # dispatch gets a separate process, a separate worktree and a separate context, and
 # the findings reach it as a file on disk rather than as ambient memory.
-WORKFLOW_TRIAGE = _env("FACTORY_WORKFLOW_TRIAGE", "darkfactory-triage")
-WORKFLOW_IMPLEMENT = _env("FACTORY_WORKFLOW_IMPLEMENT", "darkfactory-implement")
-WORKFLOW_VALIDATE = _env("FACTORY_WORKFLOW_VALIDATE", "darkfactory-validate")
-WORKFLOW_FIX = _env("FACTORY_WORKFLOW_FIX", "darkfactory-fix")
-WORKFLOW_REGRESS = _env("FACTORY_WORKFLOW_REGRESS", "darkfactory-regress")
+WORKFLOW_TRIAGE = _env("FACTORY_WORKFLOW_TRIAGE", "factory-triage")
+WORKFLOW_IMPLEMENT = _env("FACTORY_WORKFLOW_IMPLEMENT", "factory-implement")
+WORKFLOW_VALIDATE = _env("FACTORY_WORKFLOW_VALIDATE", "factory-validate")
+WORKFLOW_FIX = _env("FACTORY_WORKFLOW_FIX", "factory-fix")
+WORKFLOW_REGRESS = _env("FACTORY_WORKFLOW_REGRESS", "factory-regress")
 
 # Model tiers, not literal model ids -- Archon resolves a tier against whatever
 # provider is configured, so a factory written with tiers survives a provider swap.
@@ -249,7 +249,7 @@ SLACK_CAPS_AUTONOMY = _env("FACTORY_SLACK_CAPS_AUTONOMY", "false").lower() == "t
 # ratchet, the two gates that are code -- exists to earn 3.
 #
 # The SHIPPED value is 0, deliberately. A fresh install must not auto-merge before
-# a single lap has been proven by hand, and `darkfactory doctor` refuses 3 while
+# a single lap has been proven by hand, and `factory doctor` refuses 3 while
 # there is no holdout, so the dial cannot outrun the evidence.
 AUTONOMY = _env_int("FACTORY_AUTONOMY", 0)
 
@@ -397,7 +397,7 @@ def _base_branch() -> str:
 BASE_BRANCH = _base_branch()
 
 REGRESS_CRON = _env("FACTORY_REGRESS_CRON", "0 6 * * 1")
-TASK_NAME = _env("FACTORY_TASK_NAME", f"darkfactory-{ROOT.name}")
+TASK_NAME = _env("FACTORY_TASK_NAME", f"factory-{ROOT.name}")
 
 # --- escalation ---------------------------------------------------------------
 # THE ONLY THING THAT REACHES YOU. Everything else is written to disk and waits.
@@ -432,7 +432,7 @@ PRIORITIES = ["critical", "high", "medium", "low"]
 
 
 def summary() -> str:
-    """One screen, for `darkfactory doctor` and for a human at 3am."""
+    """One screen, for `factory doctor` and for a human at 3am."""
     return "\n".join(
         [
             f"root            {ROOT}",

@@ -75,7 +75,7 @@ def install_cron() -> int:
     log = config.SHARED / ".factory" / "factory.log"
     lines = [
         existing.rstrip(),
-        f"# {config.TASK_NAME} -- the dark factory dispatcher",
+        f"# {config.TASK_NAME} -- the factory dispatcher",
         f"*/{config.INTERVAL_MINUTES} * * * * cd {config.SHARED} && {DISPATCH} >> {log} 2>&1",
         f"# {config.TASK_NAME} -- the scheduled regression",
         f"{config.REGRESS_CRON} cd {config.SHARED} && {REGRESS} >> {log} 2>&1",
@@ -225,9 +225,9 @@ def main(argv: list[str]) -> int:
             "  correctly do nothing. That is exactly how people convince themselves a\n"
             "  factory is running when it has never completed a lap.\n\n"
             "  Prove one lap by hand first:\n"
-            "    darkfactory run implement gh:issue:<n>\n"
+            "    factory run implement gh:issue:<n>\n"
             "  then raise the dial:\n"
-            "    darkfactory level 1",
+            "    factory level 1",
             file=sys.stderr,
         )
         return 1

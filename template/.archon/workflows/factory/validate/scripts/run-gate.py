@@ -161,7 +161,7 @@ if guard_rc != 0:
         state.main(["set", target, "state=rejected"])
         state.comment(
             target,
-            "**Dark Factory validation: REJECTED**\n\n"
+            "**Factory validation: REJECTED**\n\n"
             f"{reason}\n\n"
             "Auto-reject, no fix attempt (FACTORY_RULES §6). Needing a protected file "
             "touched means the scope was misunderstood, which is a triage decision "

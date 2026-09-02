@@ -41,7 +41,7 @@ if rate_limited:
              check=False)
     state.comment(
         target,
-        "**Dark Factory triage: rate-limited**\n\n"
+        "**Factory triage: rate-limited**\n\n"
         f"{flood_reason}\n\n"
         "No disposition has been made. This is a delay, not a decision.",
     )
@@ -92,7 +92,7 @@ header = {
     "needs-human": "escalated to a human",
 }[disposition]
 
-body = [f"**Dark Factory triage: {header}**", "", note]
+body = [f"**Factory triage: {header}**", "", note]
 if disposition == "accepted":
     body += ["", f"_Priority: {priority or 'unset'} · Area: {area or 'unset'}_"]
 if cited:

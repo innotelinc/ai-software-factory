@@ -36,7 +36,7 @@ prime -> plan -> implement -> commit -> guard -> self-check -> review -> open PR
 
 | # | Component | This repo's version |
 |---|-----------|---------------------|
-| 1 | Workflow-driven repo | Archon, five workflows in `.archon/workflows/darkfactory/` |
+| 1 | Workflow-driven repo | Archon, five workflows in `.archon/workflows/factory/` |
 | 2 | The trigger | `factory/dispatch.py` every <N> minutes, `factory/regress-trigger.py` weekly |
 | 3 | Deployment | <strategy — or "not yet closed; merging is where this stops"> |
 | 4 | Guidance layer | `MISSION.md` · `FACTORY_RULES.md` · `CLAUDE.md` |

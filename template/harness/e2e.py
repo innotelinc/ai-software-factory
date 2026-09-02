@@ -44,7 +44,7 @@ def run_e2e(app) -> int | None:
     # TODO: REPLACE EVERYTHING BELOW WITH YOUR OWN JOURNEY.
     #
     # Delete the marker line above once these are YOUR assertions.
-    # `darkfactory doctor` BLOCKS level 2 and above until you do, because a gate
+    # `factory doctor` BLOCKS level 2 and above until you do, because a gate
     # that is green about the template's sample product is worse than no gate at
     # all: it is green.
     #

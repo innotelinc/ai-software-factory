@@ -1,11 +1,11 @@
-name: darkfactory-triage
+name: factory-triage
 description: |
   Sort ONE issue against MISSION.md and FACTORY_RULES.md and apply the disposition.
 
   Use when: the dispatcher finds an untriaged issue. Also runnable by hand:
-    archon workflow run darkfactory-triage --no-worktree "triage gh:issue:12"
-  NOT for: implementing (darkfactory-implement), validating a PR
-  (darkfactory-validate), or the scheduled regression (darkfactory-regress).
+    archon workflow run factory-triage --no-worktree "triage gh:issue:12"
+  NOT for: implementing (factory-implement), validating a PR
+  (factory-validate), or the scheduled regression (factory-regress).
 
   ONE ISSUE PER RUN, deliberately. Batching is cheaper and it costs the property
   that matters: a batch that dies halfway leaves some issues labelled and some not,

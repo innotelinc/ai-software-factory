@@ -1,12 +1,12 @@
-name: darkfactory-implement
+name: factory-implement
 description: |
   Take ONE accepted issue from the queue to an open pull request: prime, plan,
   implement, review, open. This is the PIV loop with the approvals removed.
 
   Use when: the dispatcher finds an issue labelled factory:accepted. By hand:
-    archon workflow run darkfactory-implement --branch factory/impl-12 "implement gh:issue:12"
-  NOT for: triage (darkfactory-triage), validating the PR this opens
-  (darkfactory-validate), or fixing one (darkfactory-fix).
+    archon workflow run factory-implement --branch factory/impl-12 "implement gh:issue:12"
+  NOT for: triage (factory-triage), validating the PR this opens
+  (factory-validate), or fixing one (factory-fix).
 
   IT DOES NOT MERGE AND IT DOES NOT JUDGE ITS OWN WORK. The last thing it does is
   open a PR labelled for the independent validator. A builder that can approve its

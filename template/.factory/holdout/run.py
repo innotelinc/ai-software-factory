@@ -67,7 +67,7 @@ def expect(name: str, ok: bool, detail: str = "") -> None:
 # SCAFFOLD_EXAMPLE_DELETE_THIS_LINE_WHEN_YOU_WRITE_YOUR_OWN
 # ==========================================================================
 # TODO: DELETE EVERY SCENARIO BELOW AND WRITE YOURS.
-# Delete the marker line above when they are yours. `darkfactory doctor` blocks
+# Delete the marker line above when they are yours. `factory doctor` blocks
 # level 3 until you do.
 # ==========================================================================
 

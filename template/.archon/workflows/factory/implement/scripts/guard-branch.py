@@ -58,7 +58,7 @@ if target:
     try:
         state.comment(
             target,
-            "**Dark Factory guard: blocked**\n\n"
+            "**Factory guard: blocked**\n\n"
             f"{reason}\n\n"
             "Auto-reject, no fix attempt (FACTORY_RULES §6). No pull request was "
             "opened. Needing a protected file touched means the scope was "

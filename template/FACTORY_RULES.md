@@ -8,7 +8,7 @@
   MOST OF THIS FILE IS ALREADY TRUE FOR YOUR PROJECT. It ships filled in, because the
   rules that make an unattended agent safe are the same in nearly every repository --
   what changes is the mission, not the discipline. The handful of project-specific
-  lines are marked with ANGLE BRACKETS. `darkfactory doctor` reports any still there.
+  lines are marked with ANGLE BRACKETS. `factory doctor` reports any still there.
 -->
 
 This file governs how the factory operates on this repository. Every workflow reads
@@ -171,7 +171,7 @@ these touched means the scope was misunderstood, which is a triage decision rath
 than a code fix.
 
 **Governance:** `MISSION.md`, `FACTORY_RULES.md`, `FACTORY.md`, the conventions file
-**The machinery:** `factory/**`, `.archon/workflows/darkfactory/**`
+**The machinery:** `factory/**`, `.archon/workflows/factory/**`
 **The judge:** `harness/**` — it *is* the definition of "working", and a builder that
   can edit its own judge can make any claim true
 **The locks:** `.factory/locks/**` (the ratchet floor), `.factory/holdout/**` (the

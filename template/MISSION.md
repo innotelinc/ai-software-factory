@@ -7,7 +7,7 @@
   complete because the discipline that makes an unattended agent safe is the same
   everywhere. What is being built, and what must never be built, is not.
 
-  Replace every <angle-bracket>. `darkfactory doctor` reports any that remain, and
+  Replace every <angle-bracket>. `factory doctor` reports any that remain, and
   refuses to raise the dial while they do.
 
   This file is the compression of your spec down to the part an agent has to OBEY.

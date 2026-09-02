@@ -1,11 +1,11 @@
-name: darkfactory-regress
+name: factory-regress
 description: |
   Run the full gate against main on a schedule, and file an issue for anything that
   broke. This is the node that closes the self-healing loop.
 
   Use when: the weekly trigger fires, or after N merges. By hand:
-    archon workflow run darkfactory-regress --branch factory/regress "regress"
-  NOT for: per-PR validation (darkfactory-validate).
+    archon workflow run factory-regress --branch factory/regress "regress"
+  NOT for: per-PR validation (factory-validate).
 
   =====================================================================
   WHY THIS EXISTS -- the loop that closes without a human noticing first

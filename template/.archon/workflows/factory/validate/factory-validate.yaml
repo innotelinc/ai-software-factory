@@ -1,12 +1,12 @@
-name: darkfactory-validate
+name: factory-validate
 description: |
   Judge ONE pull request against the issue it claims to fix, independently, and let
   code decide what happens next: merge, hold, request changes, or reject.
 
   Use when: the dispatcher finds a PR labelled factory:needs-review. By hand:
-    archon workflow run darkfactory-validate --branch factory/val-14 "validate gh:pr:14"
-  NOT for: implementing (darkfactory-implement), fixing findings
-  (darkfactory-fix), or the scheduled regression (darkfactory-regress).
+    archon workflow run factory-validate --branch factory/val-14 "validate gh:pr:14"
+  NOT for: implementing (factory-implement), fixing findings
+  (factory-fix), or the scheduled regression (factory-regress).
 
   =====================================================================
   THE HOLDOUT — the one design constraint everything else serves

@@ -252,7 +252,7 @@ forward. `next_action` has no branch for it, so the factory carries on with othe
 and the PR waits, which is the whole intent: a hold does not stop the factory, it stops
 that merge.
 
-And it gets its own line in `darkfactory status`. A hold is the one outcome that is
+And it gets its own line in `factory status`. A hold is the one outcome that is
 neither a failure nor an escalation — nothing is wrong — which makes it the easiest
 thing in the system to never look at.
 
@@ -349,7 +349,7 @@ setting is not portable without whatever computes it.
 
 ### The armed factory that never re-tested anything
 
-**What happened.** `darkfactory arm` on Windows printed `ARMED`, created the scheduled
+**What happened.** `factory arm` on Windows printed `ARMED`, created the scheduled
 task, and the doctor reported `trigger armed: scheduled`. Everything agreed the factory
 was running.
 
@@ -663,7 +663,7 @@ itself.
 
 ## The escalation that fed the queue it was supposed to leave
 
-**Symptom.** An unattended loop dispatched `darkfactory-validate` at one pull request
+**Symptom.** An unattended loop dispatched `factory-validate` at one pull request
 **68 times in three and a half hours**, every tick, each run failing in the same way.
 Nothing else in the queue was ever reached.
 
@@ -965,7 +965,7 @@ about, reproduced in a second file and armed at the worst possible moment.
 **2. It produced a hybrid, not the previous tree.** `git checkout <sha> -- .` restores
 what exists in `<sha>` and cannot remove what was ADDED since, so a rollback to a commit
 predating a file leaves that file at its current content. Measured: rolling back to the
-`darkfactory init` commit produced a release still containing the feature being rolled
+`factory init` commit produced a release still containing the feature being rolled
 back, reported as `ROLLED_BACK`.
 
 **3. It failed opaquely when the target was too old.** Removing files added since can

@@ -80,7 +80,7 @@ def die(msg: str) -> None:
         try:
             state.comment(
                 target,
-                "**Dark Factory validation: could not start**\n\n"
+                "**Factory validation: could not start**\n\n"
                 f"{msg}\n\n"
                 "This is a validator-side failure, not a defect in this pull request. "
                 "The PR is left open and labelled for a human; without this label the "
@@ -121,7 +121,7 @@ if pr["_state"] in ("passed", "merged"):
     note(
         f"ALREADY_VALIDATED: {target} is '{pr['_state']}'. It has passed and is "
         f"waiting for the merge step, not for another validation. Run the dispatcher "
-        f"(`darkfactory tick`) at autonomy 3 or above, or merge it by hand. Nothing "
+        f"(`factory tick`) at autonomy 3 or above, or merge it by hand. Nothing "
         f"here is wrong with the pull request."
     )
     sys.exit(1)

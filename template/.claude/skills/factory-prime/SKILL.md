@@ -6,7 +6,7 @@ argument-hint: the issue you are about to work, e.g. `gh:issue:12` or a path to 
 
 # factory-prime
 
-**The instructions for this step live in `.archon/workflows/darkfactory/implement/commands/prime.md`. Read that file now and follow it.**
+**The instructions for this step live in `.archon/workflows/factory/implement/commands/prime.md`. Read that file now and follow it.**
 This skill exists so you can run the step by hand; it deliberately does not restate
 the content, because a second copy is a second thing to keep true.
 

@@ -93,7 +93,7 @@ except Exception as e:  # noqa: BLE001
 
 # --- 4. hand it back -----------------------------------------------------------
 report = artifacts / "fix-report.md"
-body = ["**Dark Factory fix**: attempt " + str(attempt), ""]
+body = ["**Factory fix**: attempt " + str(attempt), ""]
 if report.exists():
     body.append(report.read_text(encoding="utf-8", errors="replace")[:5000])
 else:

@@ -6,7 +6,7 @@ argument-hint: the issue to plan, e.g. `gh:issue:12`
 
 # factory-plan
 
-**The instructions for this step live in `.archon/workflows/darkfactory/implement/commands/plan.md`. Read that file now and follow it.**
+**The instructions for this step live in `.archon/workflows/factory/implement/commands/plan.md`. Read that file now and follow it.**
 This skill exists so you can run the step by hand; it deliberately does not restate
 the content, because a second copy is a second thing to keep true.
 

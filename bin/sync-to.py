@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Push template changes into a repo that already ran `darkfactory init`.
+"""Push template changes into a repo that already ran `factory init`.
 
     python bin/sync-to.py ../tally
     python bin/sync-to.py ../tally --dry-run
@@ -37,7 +37,7 @@ TEMPLATE = HOME / "template"
 # The machinery, which is the same in every factory and therefore safe to overwrite.
 SYNC = [
     "factory",
-    ".archon/workflows/darkfactory",
+    ".archon/workflows/factory",
     "harness/ci.py",
     "harness/appproc.py",
     "harness/mutations/run.py",
@@ -110,7 +110,7 @@ def main(argv: list[str]) -> int:
     dry = "--dry-run" in argv
     dest = Path([a for a in argv if not a.startswith("-")][0]).resolve()
     if not (dest / "factory").is_dir():
-        print(f"{dest} has no factory/ -- run `darkfactory init` there first.", file=sys.stderr)
+        print(f"{dest} has no factory/ -- run `factory init` there first.", file=sys.stderr)
         return 1
 
     changed, skipped = [], []

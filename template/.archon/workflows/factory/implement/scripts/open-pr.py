@@ -90,7 +90,7 @@ if not re.search(r"(?:fixes|closes|resolves)\s+#\d+", body, re.I):
 body = (
     body.rstrip()
     + "\n\n---\n"
-    + f"Opened by `darkfactory-implement`. No human read this diff.\n"
+    + f"Opened by `factory-implement`. No human read this diff.\n"
 )
 body_file = artifacts / "pr-body.md"
 body_file.write_text(body, encoding="utf-8")

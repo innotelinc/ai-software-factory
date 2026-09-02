@@ -1,6 +1,6 @@
 # The first hour
 
-What to do after `darkfactory init`, in order, and what each step is actually for.
+What to do after `factory init`, in order, and what each step is actually for.
 
 The short version: **the doctor is a checklist and working through it is the build.**
 It fails on a fresh install. That is it working.
@@ -10,7 +10,7 @@ It fails on a fresh install. That is it working.
 ## 0. Read what it wrote
 
 ```bash
-darkfactory doctor
+factory doctor
 ```
 
 Seven or eight failures, each naming the level it blocks. Nothing is wrong. The three
@@ -172,10 +172,10 @@ So slack here **pins the dial** rather than printing a note. A note gets read on
 the person who already knew.
 
 **And the hold is a state, not a note.** A held PR gets `factory:held`, which nothing
-dispatches and no node may leave; `darkfactory status` names it on its own line. The
+dispatches and no node may leave; `factory status` names it on its own line. The
 first version of this posted the explanation as a PR comment and set the PR to
 `passed` — the dispatcher merged it forty-five seconds later, because `passed` is what
-a mergeable PR is called. When you clear a hold you run `darkfactory accept <target>`, which archives the
+a mergeable PR is called. When you clear a hold you run `factory accept <target>`, which archives the
 assumptions and sends the PR back to `open` for a fresh validation rather than merging
 the judgement you were holding. Raise the floor in the same sitting if slack was named
 too, or the next run holds again for that reason.
@@ -203,7 +203,7 @@ Test it once on purpose: `python factory/notify.py --test`.
 ## 7. One lap by hand
 
 ```bash
-darkfactory run implement gh:issue:1
+factory run implement gh:issue:1
 ```
 
 Watch it. Read the plan it wrote, read the PR body, read the judge's verdict. **Do not
@@ -217,9 +217,9 @@ merge yet; you are reading the work.
 ## 8. The dial, one notch at a time
 
 ```bash
-darkfactory level 1     # an accepted issue becomes a PR
-darkfactory level 2     # + the validator writes a verdict
-darkfactory level 3     # + it merges without you reading the diff
+factory level 1     # an accepted issue becomes a PR
+factory level 2     # + the validator writes a verdict
+factory level 3     # + it merges without you reading the diff
 ```
 
 Each is refused until the doctor says the evidence supports it. Watch one full cycle
@@ -238,7 +238,7 @@ so it stays a decision rather than a dial nobody touched again.
 ## 9. The trigger, last
 
 ```bash
-darkfactory arm
+factory arm
 ```
 
 It refuses below level 1, because a scheduler at level 0 wakes up forever and
@@ -252,10 +252,10 @@ merged. The first version of this installed only the dispatcher on Windows and r
 Nothing reports a job that was never created.
 
 ```powershell
-Get-ScheduledTask | Where-Object { $_.TaskName -like "darkfactory-*" }
+Get-ScheduledTask | Where-Object { $_.TaskName -like "factory-*" }
 ```
 ```bash
-crontab -l | grep darkfactory
+crontab -l | grep factory
 ```
 
 **Nothing pushes.** Filing an issue does not trigger a run; the scheduler wakes on a
@@ -268,9 +268,9 @@ with nothing to do, and a poll that breaks is a poll you can see not running.
 ## 10. Use the stop button, once, on purpose
 
 ```bash
-darkfactory halt "testing the stop button"
-darkfactory tick          # should refuse to dispatch anything
-darkfactory resume
+factory halt "testing the stop button"
+factory tick          # should refuse to dispatch anything
+factory resume
 ```
 
 Then the remote half, which is the one you will actually reach for, because it works

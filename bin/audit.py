@@ -4,7 +4,7 @@
     python bin/audit.py                 # the shipped template
     python bin/audit.py --repo ../tally # a factory somebody installed
 
-`darkfactory doctor` asks "is this repository set up correctly?" -- protected files,
+`factory doctor` asks "is this repository set up correctly?" -- protected files,
 a real holdout, a calibrated ratchet, a channel that can reach you. This asks a
 different question: **is the machinery underneath it still sound?**
 
@@ -77,7 +77,7 @@ def check_node_outputs(root: Path) -> None:
     Archon catches an undeclared FIELD at load time. What it cannot see is a producer
     whose script will not actually emit JSON at runtime, which is the next check.
     """
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     if not pack.is_dir():
         fail("workflow pack", f"not found at {pack}")
         return
@@ -115,7 +115,7 @@ def check_emitting_scripts(root: Path) -> None:
     script's own `print()` calls is not enough; the script has to import `nodeio`,
     which redirects the stream for the whole process.
     """
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     if not pack.is_dir():
         return
 
@@ -166,7 +166,7 @@ def check_all_scripts_parse(root: Path) -> None:
     file that only runs on the escalation path, discovered at 3am on the one run that
     needed it.
     """
-    for base in (root / "factory", root / ".archon" / "workflows" / "darkfactory"):
+    for base in (root / "factory", root / ".archon" / "workflows" / "factory"):
         if not base.is_dir():
             continue
         for p in sorted(base.rglob("*.py")):
@@ -193,7 +193,7 @@ def check_scoped_grants(root: Path) -> None:
     so politely in prose, and exited 0. Nothing errored. A guard that silently does
     not apply is worse than no guard, and so is a grant.
     """
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     if not pack.is_dir():
         return
     for wf in sorted(pack.rglob("*.yaml")):
@@ -218,7 +218,7 @@ def check_yaml_booleans(root: Path) -> None:
     a finding called "test issue" after two and a half minutes of genuine work.
     Nothing errors. The verdict is just quietly worthless.
     """
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     if not pack.is_dir():
         return
     try:
@@ -353,7 +353,7 @@ def check_no_freelance_writes(root: Path) -> None:
         (r"gh\s+pr\s+review", "approves without the gate"),
         (r"gh\s+issue\s+close", "disposes of an issue outside the transition table"),
     ]
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     for p in list(pack.rglob("*.py")) + list(pack.rglob("*.md")) + list(pack.rglob("*.yaml")):
         text = p.read_text(encoding="utf-8", errors="replace")
         for pattern, why in banned:
@@ -397,7 +397,7 @@ def check_deny_lists(root: Path) -> None:
     node can read the assertions its work will be judged against -- and it will write
     code aimed at exactly those assertions instead of at the problem.
     """
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     for wf in sorted(pack.rglob("*.yaml")):
         text = wf.read_text(encoding="utf-8")
         for block in re.split(r"^  - id:\s*", text, flags=re.M)[1:]:
@@ -531,7 +531,7 @@ def check_guard_is_trusted(root: Path) -> None:
     PROTECTED_VIOLATION=2. Nothing else in the machinery matters if this is wrong: the
     guard is what makes every other protection real.
     """
-    runner = root / ".archon" / "workflows" / "darkfactory" / "validate" / "scripts" / "run-gate.py"
+    runner = root / ".archon" / "workflows" / "factory" / "validate" / "scripts" / "run-gate.py"
     if not runner.exists():
         fail("guard is trusted", f"{runner.name} is missing, so nothing runs the guard")
         return
@@ -567,7 +567,7 @@ def check_install_ships_a_runner(root: Path) -> None:
     every part installed and its loop, monitor and notifier written by hand afterwards.
     That is not an install, it is a parts list.
     """
-    installer = root.parent / "bin" / "darkfactory.py" if root.name == "template" else None
+    installer = root.parent / "bin" / "factory.py" if root.name == "template" else None
     src = installer if installer and installer.exists() else Path(__file__).resolve()
     body = src.read_text(encoding="utf-8")
     for name, why in (
@@ -716,7 +716,7 @@ def check_workflow_state_writes(root: Path) -> None:
     if not declared:
         fail("workflow state writes", "could not read the transition table from state.py")
         return
-    pack = root / ".archon" / "workflows" / "darkfactory"
+    pack = root / ".archon" / "workflows" / "factory"
     for script in sorted(pack.rglob("*.py")):
         body = script.read_text(encoding="utf-8")
         for m in re.finditer(r'"state=([a-z-]+)"', body):

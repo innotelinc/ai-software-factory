@@ -77,7 +77,7 @@ def infra_failure(reason: str) -> None:
     try:
         state.comment(
             target,
-            "**Dark Factory validation: could not render a verdict**\n\n"
+            "**Factory validation: could not render a verdict**\n\n"
             f"{reason}\n\n"
             "This is a validator-side failure, not a defect in this pull request. The "
             "PR is left open and labelled for a human. Do not re-queue the issue for "

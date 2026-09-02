@@ -11,7 +11,7 @@ That last sentence is the whole difficulty. Everything else is plumbing.
 
 ```bash
 cd your-repo
-darkfactory init
+factory init
 ```
 
 That is the install. It writes the governance files, the runner, the harness scaffold
@@ -61,7 +61,7 @@ the one thing nobody can write in advance.
 
 ## The three things that are yours
 
-`darkfactory doctor` will fail on all three the moment you install, and **that is it
+`factory doctor` will fail on all three the moment you install, and **that is it
 working.** It is a checklist, and working through it is the build.
 
 **1. `MISSION.md` — and specifically its out-of-scope list.** This is how an agent
@@ -98,7 +98,7 @@ human reading it, and it is the whole point: a factory that stops at 2 is a code
 generator with a queue, and the person is still the bottleneck they were trying to
 remove. Everything expensive here exists to earn 3.
 
-`darkfactory level 3` **refuses** until the doctor says the evidence supports it — a
+`factory level 3` **refuses** until the doctor says the evidence supports it — a
 real E2E, a holdout, a mutation set that has been shown to catch things, a ratchet
 with numbers in it, and a channel that can actually reach you. A dial that outruns
 its evidence is the failure this whole system exists to prevent.
@@ -216,7 +216,7 @@ floor requires, which is exactly how many assertions could be deleted with the g
 still green.
 
 **A hold is a state, not a message.** The PR gets `factory:held`, which nothing
-dispatches and no node may leave — `darkfactory accept <target>` archives the
+dispatches and no node may leave — `factory accept <target>` archives the
 assumptions and sends it back to `open`, so the merge still happens through a full
 validation rather than by skipping one. Agreeing with a judgement is not the same as
 skipping the gate that acts on it. The first version wrote the
@@ -228,14 +228,14 @@ forty-five seconds later, because `passed` is what a mergeable PR is called.
 ## Commands
 
 ```bash
-darkfactory init          # install into this repo
-darkfactory doctor        # the checklist. It will fail. That is it working.
-darkfactory status        # what is in flight, what the dial is, what needs a human
-darkfactory run implement gh:issue:4    # one lap, by hand, watching
-darkfactory level 1       # raise the dial (refused without the evidence)
-darkfactory arm           # install the schedule (refused below level 1)
-darkfactory accept gh:pr:11   # agree with a held PR's recorded assumptions
-darkfactory halt          # the stop button
+factory init          # install into this repo
+factory doctor        # the checklist. It will fail. That is it working.
+factory status        # what is in flight, what the dial is, what needs a human
+factory run implement gh:issue:4    # one lap, by hand, watching
+factory level 1       # raise the dial (refused without the evidence)
+factory arm           # install the schedule (refused below level 1)
+factory accept gh:pr:11   # agree with a held PR's recorded assumptions
+factory halt          # the stop button
 ```
 
 And the three things `init` installs that actually RUN it, which are yours to start:
@@ -277,7 +277,7 @@ python bin/selfcheck-mutations.py      # and: would the self-test know if they b
 does not copy `bin/`:
 
 ```bash
-cd your-repo && python factory/_selftest.py     # or just `darkfactory doctor`, which runs it
+cd your-repo && python factory/_selftest.py     # or just `factory doctor`, which runs it
 ```
 
 To audit an installed repo, run the auditor **from here** and point it at that repo:
@@ -330,7 +330,7 @@ recording from the first lap.
 ## Layout
 
 ```
-bin/darkfactory.py     the CLI
+bin/factory.py     the CLI
 bin/sync-to.py         push template fixes into a repo that already installed
 bin/audit.py           cross-file invariants no single file can check alone
 template/              what init copies in

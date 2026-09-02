@@ -1,13 +1,13 @@
-name: darkfactory-fix
+name: factory-fix
 description: |
   Address the validator's findings on ONE pull request, then hand it back to the
   independent validator. Bounded by an attempt cap.
 
   Use when: the dispatcher finds a PR labelled factory:needs-fix under the cap.
   By hand:
-    archon workflow run darkfactory-fix --branch factory/fix-14 "fix gh:pr:14"
-  NOT for: the first implementation (darkfactory-implement) or judging
-  (darkfactory-validate).
+    archon workflow run factory-fix --branch factory/fix-14 "fix gh:pr:14"
+  NOT for: the first implementation (factory-implement) or judging
+  (factory-validate).
 
   WHY THIS IS ITS OWN WORKFLOW rather than a loop inside the validator. A fix that
   runs in the same process as the judgement it is answering can inherit the judge's

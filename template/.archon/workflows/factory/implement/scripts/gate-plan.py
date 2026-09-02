@@ -78,7 +78,7 @@ if escalate:
     try:
         state.comment(
             target,
-            "**Dark Factory plan: escalated**\n\n"
+            "**Factory plan: escalated**\n\n"
             f"{escalate[:3000]}\n\n"
             "_No branch was opened. The factory stops here until a human acts._",
         )

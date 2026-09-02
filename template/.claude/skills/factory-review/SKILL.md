@@ -6,7 +6,7 @@ argument-hint: optionally the base branch to diff against (default: the repo's d
 
 # factory-review
 
-**The instructions for this step live in `.archon/workflows/darkfactory/implement/commands/review.md`. Read that file now and follow it.**
+**The instructions for this step live in `.archon/workflows/factory/implement/commands/review.md`. Read that file now and follow it.**
 This skill exists so you can run the step by hand; it deliberately does not restate
 the content, because a second copy is a second thing to keep true.
 
