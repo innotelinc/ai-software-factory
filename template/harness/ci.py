@@ -19,7 +19,9 @@ Python-only: a Go repo, a Node repo or a CLI with no HTTP surface would have to
 rewrite the ladder to change two strings.
 
 WHAT IS STILL NOT TEMPLATABLE IS EVERY ASSERTION. What "working" means for your
-product is the one thing nobody can write in advance, and it lives in `e2e.py`.
+product is the one thing nobody can write in advance. It lives in two markdown
+files an agent reads on every run -- `harness/END-TO-END.md` and, above the
+independence line, `.factory/holdout/HOLDOUT.md`.
 
 THE CONTRACT, in four parts:
 
@@ -105,7 +107,7 @@ def watchdog(seconds: int, label: str, app=None):
 
     Browser CLIs -- Playwright's driver server, chromedriver, agent-browser -- spawn
     a PERSISTENT DAEMON that inherits the stdout pipe, so a captured subprocess
-    inside `e2e.py` blocks on EOF forever after the CLI itself has exited. The gate
+    inside a journey blocks on EOF forever after the CLI itself has exited. The gate
     prints APP_STARTED and then nothing at all: no marker, no GATE_FAILED, no exit.
     Five minutes of silence is indistinguishable from a slow test, and an unattended
     factory waits for it all night while holding its dispatch lock.
@@ -220,9 +222,15 @@ def main() -> int:
     # ONE OF THE TWO GATES THAT MUST BE CODE. Without a positive assertion here, a
     # crashed app produces a validator that reports "not testable" and something
     # downstream counts that as fine.
+    #
+    # The JOURNEYS are markdown and an agent drives them (see agentcheck.py). What
+    # stays code is everything that decides whether the rung passed: the app really
+    # started, the result really exists, every assertion carries an observed value,
+    # and the counts meet the ratchet. The agent supplies evidence; it does not get
+    # a vote on the verdict.
     sys.path.insert(0, str(HERE))
+    from agentcheck import AgentCheckFailed, run_rung  # noqa: E402
     from appproc import AppDidNotStart, make_driver  # noqa: E402
-    from e2e import run_e2e  # noqa: E402
 
     app = make_driver(CONFIG)
     try:
@@ -241,27 +249,46 @@ def main() -> int:
     try:
         wd = watchdog(int(CONFIG.get("e2e_timeout_s", 300)), "e2e", app)
         try:
-            steps = run_e2e(app)
+            journeys, steps, failures = run_rung("e2e", CONFIG, app)
+        except AgentCheckFailed as e:
+            # The rung could not be RUN. Named separately from a failing journey
+            # because the remedy is different and the log has to say which one it
+            # was: a broken harness reads as a broken product otherwise, and
+            # somebody spends the morning in the wrong file.
+            return fail("e2e-harness", str(e))
         finally:
             wd.cancel()
-        if steps is None:
-            return fail("e2e")
-        print(f"E2E_PASSED steps={steps}", flush=True)
+        if failures:
+            for f in failures:
+                print(f"  E2E_FAIL  {f}", flush=True)
+            return fail("e2e", f"{len(failures)} of {steps} assertions failed")
+        print(f"E2E_PASSED journeys={journeys} steps={steps}", flush=True)
 
         # --- 4. holdout ------------------------------------------------------
         # Assertions the BUILDER cannot read. Everything below the independence line
         # sits inside the agent's optimisation loop; given enough attempts it
         # satisfies those rather than the thing you meant. The step change is
         # independence, not volume -- more tests below the line is not the fix.
-        holdout = ROOT / ".factory" / "holdout" / "run.py"
+        #
+        # The SCENARIOS stay in .factory/holdout/, which every builder node is
+        # denied. Only the method is public, in .claude/skills/factory-holdout.
+        # Knowing that the holdout composes features does not help anybody pass it.
+        holdout = ROOT / ".factory" / "holdout" / "HOLDOUT.md"
         if holdout.exists():
-            rc, out = run("holdout", [sys.executable, str(holdout)], timeout=600)
-            if rc != 0:
-                return fail("holdout", out)
-            print(out.strip(), flush=True)
+            try:
+                scen, asserts, failures = run_rung("holdout", CONFIG, app)
+            except AgentCheckFailed as e:
+                return fail("holdout-harness", str(e))
+            if failures:
+                for f in failures:
+                    print(f"  HOLDOUT_FAIL  {f}", flush=True)
+                return fail("holdout", f"{len(failures)} of {asserts} assertions failed")
+            print(
+                f"HOLDOUT_PASSED scenarios={scen} assertions={asserts}", flush=True
+            )
         else:
             print(
-                "HOLDOUT_ABSENT no .factory/holdout/run.py - NOTHING above the "
+                "HOLDOUT_ABSENT no .factory/holdout/HOLDOUT.md - NOTHING above the "
                 "independence line ran. Every check in this gate is one the builder "
                 "could read and iterate against.",
                 flush=True,

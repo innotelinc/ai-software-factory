@@ -36,11 +36,33 @@
     "  cli      a command. Invoked with args, stdout/stderr asserted.",
     "  library  no process at all. The E2E imports and calls it.",
     "",
-    "A frontend app is `http` plus a browser-automation CLI in your e2e.py. A",
+    "A frontend app is `http`, and the agent driving the journeys uses a browser tool. A",
     "rendered window or a game loop is NONE of these -- the logic has to live behind",
     "a headless surface an E2E can drive, and that is an architecture decision to",
     "make before the code exists, not after."
   ],
+  "_agent": [
+    "WHO DRIVES THE JOURNEYS. `harness/END-TO-END.md` and",
+    "`.factory/holdout/HOLDOUT.md` are markdown, and this command reads them, uses",
+    "the running app, and writes a result file the gate checks.",
+    "",
+    "The prompt arrives on STDIN. Any coding-agent CLI with a headless mode works:",
+    "  claude -p --permission-mode acceptEdits",
+    "  codex exec -",
+    "  pi --mode json --print",
+    "",
+    "Empty is a FAILURE, not a skip. A gate that quietly drops its end-to-end rung",
+    "reports green having never touched the app.",
+    "",
+    "Cost: this runs once per gate, plus once per planted defect during a mutation",
+    "run. Point it at a cheaper model than the one writing the code -- the job is",
+    "using an app and writing down what happened."
+  ],
+  "agent": {
+    "cmd": "",
+    "timeout_s": 900
+  },
+
   "driver": "http",
   "e2e_timeout_s": 300,
 
@@ -54,7 +76,7 @@
   },
 
   "cli": {
-    "_note": "The command under test. {args} is substituted per call from e2e.py.",
+    "_note": "The command under test. {args} is substituted per invocation.",
     "invoke": "python -m app.cli {args}",
     "smoke_args": "--version",
     "smoke_contains": ""
@@ -66,7 +88,7 @@
   },
 
   "browser": {
-    "_note": "ONLY for an app whose correctness is visual. Leave install_check empty if e2e.py never drives a browser. When it is set, `factory doctor` runs it at setup -- so a missing browser is a setup failure with an install command, not a mystery hang at gate time on a fresh runner.",
+    "_note": "ONLY for an app whose correctness is visual. Leave install_check empty if no journey needs a browser. When it is set, `factory doctor` runs it at setup -- so a missing browser is a setup failure with an install command, not a mystery hang at gate time on a fresh runner.",
     "install_check": "",
     "install_hint": "npm i -g agent-browser && agent-browser install   |   pip install playwright && playwright install chromium"
   }

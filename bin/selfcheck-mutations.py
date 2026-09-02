@@ -80,6 +80,28 @@ DEFECTS = [
     # second mechanism, so no test can distinguish a build without it.
     ("the empty run list guard is removed", "factory/dispatch.py",
      "    if not status_by_id:", "    if False:", False),
+    # THE AGENT-DRIVEN RUNGS. `_validate` is the only thing between "a model said it
+    # passed" and "the gate passed", so every one of these removes a rejection and
+    # requires the self-test to notice.
+    ("an assertion may report nothing observed", "harness/agentcheck.py",
+     "            if not observed:", "            if False:", True),
+    # FULL LINE, because a partial anchor here left an unbalanced paren, and a
+    # mutation that breaks the SYNTAX is caught by the interpreter rather than by
+    # the check it was aimed at. That reads as CAUGHT and measures nothing.
+    ("observed may simply echo expected", "harness/agentcheck.py",
+     "        if observed.lower() in _EMPTY_ANSWERS or observed.lower() == expected.lower():",
+     "        if False:", True),
+    # NOT APPLICABLE, and named rather than deleted. Every group is already
+    # required to carry at least one assertion, so by the time this line is
+    # reached `assertions` cannot be 0. It is kept as a backstop for whoever
+    # loosens the guard above it, and a set that quietly drops the defects it
+    # cannot catch is a set whose score means nothing.
+    ("zero assertions counts as a pass", "harness/agentcheck.py",
+     "    if assertions == 0:", "    if False:", False),
+    ("an empty report counts as a pass", "harness/agentcheck.py",
+     "    if not groups:", "    if False:", True),
+    ("no configured agent becomes a skip", "harness/agentcheck.py",
+     "    if not cmd.strip():", "    if False:", True),
 ]
 
 

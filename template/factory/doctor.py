@@ -14,7 +14,9 @@ level 3" cannot quietly become "switch on level 3" before the evidence exists.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -201,6 +203,36 @@ def main(argv: list[str]) -> int:
         r.add(FAIL, "holdout", "still the scaffold's example scenarios", 3)
     else:
         r.add(OK, "holdout", f"yours ({holdName})")
+
+    # WHO DRIVES THE JOURNEYS. Both END-TO-END.md and HOLDOUT.md are markdown read
+    # by a coding agent, so an unset command means those two rungs cannot run at
+    # all. It is reported as a FAILURE rather than a warning for the same reason
+    # agentcheck.py raises instead of skipping: a gate silently missing its
+    # end-to-end rung reports green having never touched the app.
+    hcfg = root / "harness" / "harness.config.json"
+    agent_cmd = ""
+    if hcfg.exists():
+        try:
+            agent_cmd = (
+                json.loads(hcfg.read_text(encoding="utf-8")).get("agent", {}).get("cmd") or ""
+            ).strip()
+        except (OSError, ValueError):
+            agent_cmd = ""
+    if agent_cmd:
+        exe = shlex.split(agent_cmd, posix=os.name != "nt")[0] if agent_cmd else ""
+        if shutil.which(exe):
+            r.add(OK, "journey agent", agent_cmd)
+        else:
+            # ON PATH IS THE CLAIM THAT MATTERS. A configured command that does not
+            # exist fails at gate time, in an unattended run, as a harness error --
+            # and it is free to catch here instead.
+            r.add(FAIL, "journey agent", f"`{exe}` is configured but not on PATH", 2)
+    else:
+        r.add(
+            FAIL, "journey agent",
+            "no agent.cmd in harness/harness.config.json -- the end-to-end and holdout "
+            "rungs are driven by a coding agent and cannot run without one", 2,
+        )
 
     defects = root / "harness" / "mutations" / "defects.json"
     if not has(defects):

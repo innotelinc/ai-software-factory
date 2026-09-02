@@ -925,6 +925,119 @@ def floor_reader_agreement_checks() -> None:
               'startsWith("_")' in src)
 
 
+# --- the agent-driven rungs, and what stops them being a sentence -------------
+# THE RISK THIS ANSWERS: end-to-end and holdout are now markdown read by a model,
+# and a model reporting on its own work is the exact shape of defect this project
+# keeps finding -- something announcing success without checking anything. What
+# makes the rung a measurement rather than an opinion is that `_validate` rejects
+# a report which is not evidence, BEFORE anything is counted. So these checks are
+# aimed at the rejections, not at the happy path: a validator that accepts
+# everything passes a happy-path test perfectly.
+
+def agentcheck_checks() -> None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
+    try:
+        import agentcheck  # noqa: PLC0415
+    except ImportError as e:
+        check("harness/agentcheck.py imports", False, str(e))
+        return
+
+    def rejects(what: str, payload: object, because: str, kind: str = "e2e",
+                says: str = "") -> None:
+        """Reject, AND for the stated reason.
+
+        `says` is not decoration. Two guards here reject an empty report
+        independently, so a check that asks only "did it raise" stays green while
+        either one is deleted -- and a guard nothing measures is a guard that
+        leaves whenever somebody is tidying up.
+        """
+        try:
+            agentcheck._validate(kind, payload)
+        except agentcheck.AgentCheckFailed as e:
+            if says and says not in str(e):
+                check(what, False, f"rejected, but for the wrong reason: {e}")
+                return
+            check(what, True)
+            return
+        check(what, False, because)
+
+    good = {"journeys": [{"name": "j", "assertions": [
+        {"name": "a", "expected": "open=0", "observed": "open=0 from GET /tasks", "ok": True},
+    ]}]}
+    groups, asserts, failures = agentcheck._validate("e2e", good)
+    check("a well-formed result counts its groups and assertions",
+          (groups, asserts, failures) == (1, 1, []), f"got {(groups, asserts, failures)}")
+
+    # THE COUNT IS THE POINT. It feeds the ratchet, and a rung that reports zero
+    # while exiting 0 is indistinguishable from one that passed.
+    rejects("zero journeys is rejected", {"journeys": []},
+            "an empty run would have been read as a pass", says="zero journeys")
+    rejects("a journey with no assertions is rejected",
+            {"journeys": [{"name": "j", "assertions": []}]},
+            "a journey that checked nothing would have counted as a journey that passed",
+            says="has no assertions")
+    rejects("a result with no journeys key is rejected", {"nope": []},
+            "an unrecognised shape must not be read as an empty pass")
+
+    # `observed` IS THE EVIDENCE. Everything else in the report is the agent
+    # restating what it was asked to do.
+    rejects("a missing observed value is rejected",
+            {"journeys": [{"name": "j", "assertions": [
+                {"name": "a", "expected": "open=0", "ok": True}]}]},
+            "an assertion with nothing observed did not run")
+    rejects("an empty observed value is rejected",
+            {"journeys": [{"name": "j", "assertions": [
+                {"name": "a", "expected": "open=0", "observed": "   ", "ok": True}]}]},
+            "whitespace is not an observation")
+    rejects("observed that merely restates expected is rejected",
+            {"journeys": [{"name": "j", "assertions": [
+                {"name": "a", "expected": "open=0", "observed": "open=0", "ok": True}]}]},
+            "echoing the expectation is the cheapest way to report a check that "
+            "never happened")
+    rejects("observed that says nothing is rejected",
+            {"journeys": [{"name": "j", "assertions": [
+                {"name": "a", "expected": "open=0", "observed": "as expected", "ok": True}]}]},
+            "'as expected' is a claim, not a measurement")
+
+    # A FAILING ASSERTION MUST SURVIVE VALIDATION, not raise. The two outcomes are
+    # different: `ok: false` is the product being broken and belongs in the log as a
+    # named failure, while a malformed report is the HARNESS being broken. Collapsing
+    # them sends whoever reads the log at 3am to the wrong file.
+    bad = {"journeys": [{"name": "j", "assertions": [
+        {"name": "the count moves", "expected": "open=0", "observed": "open=1", "ok": False},
+        {"name": "b", "expected": "x", "observed": "x observed live", "ok": True},
+    ]}]}
+    groups, asserts, failures = agentcheck._validate("e2e", bad)
+    check("a failing assertion is reported, not raised",
+          groups == 1 and asserts == 2 and len(failures) == 1,
+          f"got {(groups, asserts, len(failures))}")
+    check("the failure text carries both values",
+          failures and "open=0" in failures[0] and "open=1" in failures[0],
+          "a failure nobody can read is a failure somebody re-runs instead of fixing")
+
+    # The holdout uses `scenarios`, and the two must not be interchangeable: a
+    # holdout result shaped like an e2e result would count as an empty holdout.
+    rejects("an e2e-shaped result is not accepted where scenarios are required",
+            {"journeys": [{"name": "s", "assertions": [
+                {"name": "a", "expected": "x", "observed": "y", "ok": True}]}]},
+            "wrong key must fail loudly rather than count as zero", kind="holdout")
+    sgroups, sasserts, sfail = agentcheck._validate("holdout", {"scenarios": [
+        {"name": "s", "assertions": [
+            {"name": "a", "expected": "3 tasks", "observed": "3 returned", "ok": True}]}]})
+    check("a holdout result validates on the scenarios key",
+          (sgroups, sasserts, sfail) == (1, 1, []), f"got {(sgroups, sasserts, sfail)}")
+
+    # NOT CONFIGURED IS A FAILURE, NOT A SKIP. This is the whole reason the rung
+    # cannot quietly disappear on a machine where nobody set an agent command.
+    try:
+        agentcheck.agent_command({"agent": {"cmd": "   "}})
+        check("an unset agent command fails rather than skips", False,
+              "a gate that drops its end-to-end rung reports green having never "
+              "touched the app")
+    except agentcheck.AgentCheckFailed:
+        check("an unset agent command fails rather than skips", True)
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv
     # POINT THE LEDGER SOMEWHERE HARMLESS FOR THE WHOLE RUN, before any check fires.
@@ -951,6 +1064,7 @@ def main() -> int:
     uncalibrated_ceiling_checks()
     assumption_count_checks()
     floor_reader_agreement_checks()
+    agentcheck_checks()
 
     if FAILURES:
         if not quiet:

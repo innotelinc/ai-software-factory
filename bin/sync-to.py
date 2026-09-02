@@ -14,7 +14,7 @@ after a fix that had, as far as anything visible said, been applied.
 So this compares CONTENT, copies only what differs, and prints exactly what it
 changed. A sync that did nothing says so.
 
-IT NEVER TOUCHES THE THREE THINGS THAT ARE YOURS: MISSION.md, harness/e2e.py and
+IT NEVER TOUCHES THE THREE THINGS THAT ARE YOURS: MISSION.md, harness/END-TO-END.md and
 .factory/holdout/. Those are the product, not the machinery, and overwriting them
 with a scaffold is the one thing this must never do.
 
@@ -57,8 +57,8 @@ ADD_ONLY_CONTAINS = ("/commands/",)
 # NEVER. These are the product.
 NEVER = {
     "MISSION.md", "FACTORY_RULES.md", "CLAUDE.md", "AGENTS.md", "FACTORY.md",
-    "harness/e2e.py", "harness/harness.config.json", "harness/mutations/defects.json",
-    ".factory/holdout/run.py", ".factory/locks/floor.json", ".factory/decisions.md",
+    "harness/END-TO-END.md", "harness/harness.config.json", "harness/mutations/defects.json",
+    ".factory/holdout/HOLDOUT.md", ".factory/locks/floor.json", ".factory/decisions.md",
     "factory/config.py",  # every project-specific setting lives here
 }
 

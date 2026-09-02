@@ -364,29 +364,60 @@ def check_no_freelance_writes(root: Path) -> None:
                 fail("freelance write", f"{p.relative_to(root)} contains `{pattern}` -- {why}")
 
 
-def check_holdout_isolation(root: Path) -> None:
-    """The holdout must not import assertion helpers from the builder's side.
+def check_agent_rungs_wired(root: Path) -> None:
+    """The two agent-driven rungs exist, are reachable, and stay on the right side.
 
-    Rule 2 of the holdout: duplicate, do not import. Importing a helper from
-    `harness/` re-couples the wall to code the builder can edit, and the wall is gone
-    with one refactor nobody noticed. The process driver is the one carve-out --
-    starting a process is not an assertion.
+    `harness/e2e.py` and `.factory/holdout/run.py` were deleted when the journeys
+    became markdown, and NOTHING NOTICED. The self-test stayed green and so did this
+    auditor, because both of them check the machinery that decides a verdict and
+    neither checked that the rungs producing the evidence still existed. A gate can
+    lose its end-to-end rung entirely and report `GATE_OK`.
+
+    So this asserts, separately: the files are here, `ci.py` actually calls them, and
+    the holdout spec is inside the directory every builder node is denied. The third
+    is the one worth having. Moving those scenarios under `harness/` would leave every
+    other check green while quietly ending the independence the auto-merge rests on.
     """
-    holdout = root / ".factory" / "holdout" / "run.py"
-    if not holdout.exists():
-        return
-    src = holdout.read_text(encoding="utf-8")
-    imports = re.findall(r"^from (\w+) import|^import (\w+)", src, re.M)
-    names = {a or b for a, b in imports}
-    allowed = {"appproc", "json", "os", "sys", "re", "time", "pathlib", "Path",
-               "annotations", "__future__", "random", "math", "datetime", "typing"}
-    for name in sorted(names - allowed):
-        if (root / "harness" / f"{name}.py").exists():
+    ci = root / "harness" / "ci.py"
+    agent = root / "harness" / "agentcheck.py"
+
+    for rel, why in (
+        ("harness/agentcheck.py", "nothing runs the journeys or validates the report"),
+        ("harness/END-TO-END.md", "there is no end-to-end path to install"),
+        (".factory/holdout/HOLDOUT.md", "nothing sits above the independence line"),
+        (".claude/skills/factory-e2e/SKILL.md", "the journey agent has no instructions"),
+        (".claude/skills/factory-holdout/SKILL.md", "the holdout agent has no instructions"),
+    ):
+        if not (root / rel).exists():
+            fail("agent rungs", f"template/{rel} is missing -- {why}")
+
+    if ci.exists():
+        src = ci.read_text(encoding="utf-8")
+        if "run_rung" not in src:
+            fail("agent rungs", "harness/ci.py never calls run_rung -- the gate has no "
+                                "agent-driven rung at all")
+        else:
+            for kind in ("e2e", "holdout"):
+                if f'run_rung("{kind}"' not in src:
+                    fail("agent rungs",
+                         f"harness/ci.py does not run the {kind} rung. A rung that is "
+                         f"never invoked produces no failures, and 'did anything fail?' "
+                         f"reads that as success")
+
+    # WHERE THE SCENARIOS LIVE IS THE WHOLE ARGUMENT. Read from the source rather
+    # than assumed, so moving the path is caught here instead of six months later by
+    # nobody.
+    if agent.exists():
+        src = agent.read_text(encoding="utf-8")
+        m = re.search(r'"holdout":\s*\{[^}]*?"spec":\s*"([^"]+)"', src, re.S)
+        if not m:
+            fail("agent rungs", "cannot find the holdout spec path in agentcheck.py")
+        elif not m.group(1).startswith(".factory/holdout/"):
             fail(
                 "holdout isolation",
-                f"the holdout imports '{name}' from harness/ -- the builder can edit "
-                f"that, so the wall it is supposed to be behind is one refactor from "
-                f"gone. Duplicate the helper instead",
+                f"the holdout spec is at '{m.group(1)}', outside the directory every "
+                f"builder node is denied. The builder can read the assertions its work "
+                f"will be judged against, and it will write code aimed at exactly those",
             )
 
 
@@ -819,7 +850,7 @@ def main(argv: list[str]) -> int:
     check_state_labels(root)
     check_markers(root)
     check_no_freelance_writes(root)
-    check_holdout_isolation(root)
+    check_agent_rungs_wired(root)
     check_deny_lists(root)
     check_selftest_wired(root)
     check_watchdog_wired(root)

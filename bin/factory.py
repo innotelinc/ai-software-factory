@@ -200,6 +200,30 @@ def detect(root: Path) -> dict:
     return found
 
 
+# Headless invocations for the CLIs people actually have. The PROMPT ARRIVES ON
+# STDIN in every one of them, which is the only thing agentcheck.py assumes -- so a
+# CLI that is not on this list still works, it just has to be typed in by hand.
+AGENT_CLIS = [
+    ("claude", "claude -p --permission-mode acceptEdits"),
+    ("codex", "codex exec -"),
+    ("pi", "pi --mode json --print"),
+    ("goose", "goose run --instructions -"),
+    ("amp", "amp -x"),
+]
+
+
+def detect_agent() -> str:
+    """Which coding agent is on this machine, if any.
+
+    Detected rather than asked. A question whose answer is sitting on PATH is a
+    question nobody should be typing, and the setup interview is short on purpose.
+    """
+    for exe, cmd in AGENT_CLIS:
+        if shutil.which(exe):
+            return cmd
+    return ""
+
+
 def is_greenfield(root: Path) -> bool:
     """Source files that are not scaffolding, or not.
 
@@ -231,7 +255,7 @@ COPY_PLAN = [
     # first show its drift as an unattended run doing something you thought you had
     # already changed.
     (".claude/skills", ".claude/skills"),
-    (".factory/holdout/run.py", ".factory/holdout/run.py"),
+    (".factory/holdout/HOLDOUT.md", ".factory/holdout/HOLDOUT.md"),
     (".factory/locks/floor.json", ".factory/locks/floor.json"),
     # THE THINGS THAT ACTUALLY RUN IT. Everything above is machinery; without these
     # three an install has every part and no engine, and `doctor` says "nothing
@@ -366,8 +390,18 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     # --- wire the detected commands in ----------------------------------------
     hc = root / "harness" / "harness.config.json"
-    if hc.exists() and (found["static"] or found["unit"]):
+    if hc.exists():
         cfg = json.loads(hc.read_text(encoding="utf-8"))
+        agent = detect_agent()
+        if agent and not cfg.get("agent", {}).get("cmd"):
+            cfg.setdefault("agent", {})["cmd"] = agent
+            step(f"agent         {agent} (drives the journeys)")
+        elif not agent:
+            warn(
+                "No coding-agent CLI found on PATH. The end-to-end and holdout rungs "
+                "are driven by one, so set `agent.cmd` in harness/harness.config.json "
+                "before the gate can run."
+            )
         if found["static"]:
             cfg["static"] = found["static"]
         if found["unit"]:
@@ -375,7 +409,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         if found["unit_count_pattern"]:
             cfg["unit_count_pattern"] = found["unit_count_pattern"]
         hc.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
-        step("~ harness/harness.config.json (wired to the commands found above)")
+        step("~ harness/harness.config.json (wired to what was found above)")
 
     # --- gitignore ------------------------------------------------------------
     gi = root / ".gitignore"
@@ -407,29 +441,21 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     # --- what now -------------------------------------------------------------
     say()
-    say("  Installed. The dial is at 0: nothing dispatches until you raise it.")
+    say("  Installed. The dial is at 0, so nothing dispatches until you raise it.")
     say()
-    say("  THREE THINGS ARE YOURS, and nothing can be shipped for you:")
+    say("  Three files are yours. Nothing can write them for you:")
     say()
-    say("    1. MISSION.md          what this is, and what it must NEVER become.")
-    say("                           The out-of-scope list is what lets the factory")
-    say("                           reject a plausible request at three in the morning.")
+    say("    MISSION.md                what this is, and what it must never become.")
+    say("    harness/END-TO-END.md     the journeys a real user takes.")
+    say("    .factory/holdout/HOLDOUT.md   the same product, composed, where the")
+    say("                              builder is blocked from reading it.")
     say()
-    say("    2. harness/e2e.py      the one journey a user actually takes, asserted.")
-    say("                           Not a suite -- the most valuable thing someone does.")
-    say()
-    say("    3. .factory/holdout/   the same product, composed, in a directory the")
-    say("       run.py              builder is BLOCKED FROM READING. This is the only")
-    say("                           honest reason to merge code nobody reviewed.")
-    say()
-    say("  FACTORY_RULES.md arrived nearly complete -- the discipline that makes an")
-    say("  unattended agent safe is the same in every repo. A few lines are marked")
-    say("  <LIKE THIS>; the doctor will tell you which.")
+    say("  An agent can write all three with you. Ask it to run the factory-setup skill.")
     say()
     say("  Then, in order:")
-    say("    factory doctor            # it will fail. That is it working.")
+    say("    factory doctor                      # it will fail. That is it working.")
     say("    factory run implement gh:issue:1    # one lap, by hand")
-    say("    factory level 1           # only once a lap has completed")
+    say("    factory level 1                     # once a lap has completed")
     say()
     if not have_engine:
         warn("Archon is still missing -- nothing will dispatch until it is installed.")

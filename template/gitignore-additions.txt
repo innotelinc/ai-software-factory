@@ -24,6 +24,12 @@ __pycache__/
 .factory/assumptions/
 .factory/followups/
 
+# What the agent-driven rungs wrote THIS run. Evidence for one gate, not source.
+# Committing them would let a stale result from a build that no longer exists be
+# read as the current answer.
+harness/.results/
+.factory/holdout/.results/
+
 # Secrets. THE PRE-FLIGHT REFUSES TO START while any of these is unignored, and that
 # refusal is the point: an empty `git check-ignore` result means the next run that
 # commits publishes your key. On a public repo that is publication, not a mistake you

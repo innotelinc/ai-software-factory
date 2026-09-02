@@ -1,227 +1,157 @@
-# dark factory
+# AI Software Factory
 
-**A repository that takes work in as an issue and ships validated code out, with
-nobody at the keyboard.**
+A repo that takes work in as an issue and ships validated code out, with nobody at
+the keyboard.
 
-You file an issue. It gets triaged against your mission. It gets planned,
-implemented, independently judged, and merged. A scheduled run re-tests what already
+You file an issue. It gets checked against your mission, planned, built, judged by
+something that did not write it, and merged. A scheduled run re-tests what already
 merged and files its own bugs. Nobody reads the diff.
 
-That last sentence is the whole difficulty. Everything else is plumbing.
+Some people call this a dark factory, after lights-out manufacturing. Same idea.
+It builds software from a PRD, so I call it a software factory.
 
-```bash
-cd your-repo
-factory init
+The automation is the easy half. Being able to trust a merge nobody read is the
+hard half, and most of what is in here exists for that.
+
+---
+
+## Set it up
+
+Paste this to your coding agent, in the repo you want the factory in:
+
+```
+Help me set up my own AI software factory in this repo using this GitHub repo:
+https://github.com/coleam00/ai-software-factory
+
+Read its README and follow the "Instructions for the agent" section.
 ```
 
-That is the install. It writes the governance files, the runner, the harness scaffold
-and the workflow pack into your repo, creates the labels that are its state machine,
-and **installs the workflow engine underneath if you do not already have it** — the
-same way installing OpenClaw gets you Pi. You asked for a factory; the engine is an
-implementation detail you are allowed to ignore until you want it.
+That is the install. It clones this, runs the installer, then walks you through
+the three files nobody can write for you.
 
-Then it stops, and tells you the three things nobody can ship for you.
+**You need:** git, Python 3.10+, [`gh`](https://cli.github.com) authenticated, a
+GitHub remote, and a coding agent CLI. Everything else it installs, including the
+workflow engine.
 
----
+If you would rather do it by hand:
 
-## Why this exists
-
-For a year the answer to "how do I get one of these" was: build your own, because a
-factory has to fit your process, your codebase, and your way of working. Use mine as
-a reference.
-
-That was right about the fit and wrong about what to do with it. **Assembly is not a
-filter that keeps out people who would misuse a dark factory. It is a barrier that
-keeps out people who would benefit from one.**
-
-So this is one that works when you run it, with a set of opinions already baked in —
-and it stays open enough to replace every one of them with yours. The prompts are
-yours to rewrite; the plumbing is not, because the plumbing is the same in every
-factory and its scars are expensive to rediscover.
+```bash
+git clone https://github.com/coleam00/ai-software-factory ~/ai-software-factory
+cd /path/to/your-repo
+python ~/ai-software-factory/bin/factory.py init
+python factory/doctor.py
+```
 
 ---
 
-## The five components
-
-| # | Component | What ships | What is yours |
-|---|-----------|-----------|---------------|
-| 1 | **Workflow-driven repo** | five Archon workflows: triage · implement · validate · fix · regress, plus `/factory-*` skills that run the same steps by hand | the node prompts — your process, with the approvals removed |
-| 2 | **The trigger** | a dumb, deterministic dispatcher on a timer | the interval, and when you turn it on |
-| 3 | **Deployment** | a poll-build-healthcheck-swap skeleton | how your thing actually ships |
-| 4 | **Guidance layer** | `FACTORY_RULES.md`, nearly complete | `MISSION.md` — what this is and must never become |
-| 5 | **Validation harness** | the ladder, the markers, the drivers, the mutation runner | **every assertion.** This is the work |
-
-**Component 4 ships nearly finished and component 5 ships empty, and that split is
-the product.** The rules that make an unattended agent safe are the same in almost
-every repository — a size cap, a protected list, an attempt cap, a fixed priority
-order, a stop button that fails closed. What "working" means for *your* software is
-the one thing nobody can write in advance.
+> [!IMPORTANT]
+> ## Instructions for the agent
+>
+> You are setting up a software factory in the user's current repository. Work
+> through these in order.
+>
+> **1. Install it.**
+> ```bash
+> git clone https://github.com/coleam00/ai-software-factory ~/ai-software-factory
+> python ~/ai-software-factory/bin/factory.py init
+> ```
+> Run `init` from the root of the user's repo. It writes the runtime, the workflow
+> pack, the skills and the governance templates, creates the GitHub labels that are
+> the state machine, and installs [Archon](https://github.com/coleam00/archon) if it
+> is not already there. It changes no application code.
+>
+> **2. Run the setup skill.** `init` installs `.claude/skills/factory-setup/`.
+> Read it and follow it. It reads the repo first, then asks the user four
+> questions, then writes `MISSION.md`, `harness/END-TO-END.md` and
+> `.factory/holdout/HOLDOUT.md`.
+>
+> **Do not ask the user anything the repo already answers.** The language, the test
+> command, the start command, the routes are all readable. Four questions is the
+> budget.
+>
+> **3. Run `python factory/doctor.py` and show what failed.** It will fail. That is
+> it working: doctor is a checklist and its failures are the remaining todo list,
+> each naming the autonomy level it blocks. Do not try to make it green in one
+> sitting.
+>
+> **4. Stop there.** Do not raise the autonomy dial, do not run `factory arm`, and
+> do not start the loop. Those come after a lap has run and the user has watched it.
 
 ---
 
-## The three things that are yours
+## The three files that are yours
 
-`factory doctor` will fail on all three the moment you install, and **that is it
-working.** It is a checklist, and working through it is the build.
+Everything else ships done. These three are the build.
 
-**1. `MISSION.md` — and specifically its out-of-scope list.** This is how an agent
-recognises that a plausible, well-argued, easy-to-implement feature request is *drift*
-rather than a good idea. Without it, every request is arguably in scope, because
-almost every feature is defensible in isolation. Aim for at least five things you
-will never build, and make them things a reasonable person might ask for.
+**`MISSION.md`** is what the product is, and what it must never become. The
+out-of-scope list is the part that does work: it is how an agent recognises that a
+plausible, well-argued, easy request is drift. Without it every request is arguably
+in scope, because almost every feature is defensible on its own. Aim for at least
+five, and make them things a reasonable person would actually ask for.
 
-**2. `harness/e2e.py` — one journey, the most valuable one, as a real user takes it.**
-Not a suite. Assert what a person would notice and object to, not a status code:
-`200 OK` is not evidence the page said the right thing.
+**`harness/END-TO-END.md`** is two to five journeys in plain English. An agent
+reads them every validation run, drives your app, and reports what it saw. Name
+the value you expect. "The page loads" passes against an app that returns an empty
+body forever.
 
-**3. `.factory/holdout/run.py` — the same product, composed, where the builder cannot
-read it.** Everything in `harness/` sits inside the agent's optimisation loop: it can
-read those checks and iterate until they are green. Given enough attempts it will.
-The holdout is different only because the builder never sees it, and **that is the
-only honest reason to merge code nobody reviewed.**
+**`.factory/holdout/HOLDOUT.md`** is the same product, composed, in a directory the
+builder is blocked from reading. Everything in `harness/` sits inside the builder's
+optimisation loop: it can read those checks and iterate until they are green, and
+given enough attempts it will. The holdout is different only because the builder
+never sees it, and that is the only honest reason to merge code nobody reviewed.
+
+The journeys and the scenarios are markdown, not scripts, on purpose. A scripted
+end-to-end runs the same two requests forever and goes stale the week after it is
+written, and the staleness is invisible because it still passes.
 
 ---
 
 ## The autonomy dial
 
 ```
-0  workflows exist, run by hand              <- where every install starts
-1  an accepted issue becomes a branch and an open PR
+0  workflows exist, you run them by hand           <- every install starts here
+1  an accepted issue becomes a branch and a PR
 2  + the validator runs and writes a verdict
-3  + the validator AUTO-MERGES when every structural gate is green   <- the target
+3  + it MERGES when every structural gate is green <- the target
 4  + it triages its own issues, and the scheduled regression files its own bugs
 5  + it writes its own issues from the mission
 ```
 
 **Level 3 is the destination.** It is the first level where code merges without a
-human reading it, and it is the whole point: a factory that stops at 2 is a code
-generator with a queue, and the person is still the bottleneck they were trying to
-remove. Everything expensive here exists to earn 3.
+human reading it. A factory that stops at 2 is a code generator with a queue, and
+you are still the bottleneck you were trying to remove.
 
-`factory level 3` **refuses** until the doctor says the evidence supports it — a
-real E2E, a holdout, a mutation set that has been shown to catch things, a ratchet
-with numbers in it, and a channel that can actually reach you. A dial that outruns
-its evidence is the failure this whole system exists to prevent.
+`factory level 3` refuses until the doctor says the evidence supports it: real
+journeys, a holdout, a mutation set shown to catch things, a ratchet with numbers
+in it, and a channel that can reach you.
 
 ---
 
 ## What is enforced in code, not in a prompt
 
-A "gate" that is an instruction in a prompt is a suggestion with good manners. These
-are not:
+A gate written as an instruction in a prompt is a suggestion with good manners.
+These are not.
 
 - **The merge.** A script reads a verdict file and branches on it. Never a model
   deciding to merge.
-- **Proof the app ran.** `APP_STARTED` and `E2E_PASSED` must appear in the run output.
-  A check that never ran produces no failures, and "did anything fail?" reads that as
+- **Proof it ran.** `APP_STARTED` and `E2E_PASSED` must appear in the output. A
+  check that never ran produces no failures, and "did anything fail?" reads that as
   success.
+- **Evidence, not a claim.** Every assertion the journey agent reports carries the
+  value it actually observed. A report that restates the expectation instead of
+  what happened is rejected before anything is counted.
 - **The protected list.** A PR touching governance, the harness, the locks or the
-  holdout is auto-rejected before anything else is evaluated — and the validator
-  reads the rulebook from the **base branch**, so a PR cannot weaken the rules it is
-  about to be judged against.
-- **The scope leash.** A file count, not just a line count. The failure it catches is
-  a six-file change that grows to eleven with five one-line "while I was in here"
-  edits, well under the line cap the whole way.
-- **The stop button.** A local file *and* a remote label, because they fail in
-  different places — and the remote half fails **closed**: any error reading it counts
-  as stopped.
-- **The gate overrides the judge.** When the raw markers and the verdict disagree, the
-  raw output wins and the PR escalates.
-- **An unknown is never a pass.** Not in the gate, and not in the machinery either.
-  When the dispatcher cannot get a straight answer about whether a run is alive, it
-  keeps the lock. The version that guessed released every lock one tick after it was
-  taken and escalated running work as dead, and nothing errored while it did.
-
-And the part that checks the checker: `factory/_selftest.py` pins the invariants of the
-factory's own parts — what counts as alive, what counts as passed, what may move — and
-`doctor` runs it on every audit. Everything else here asks whether your software works.
-That asks whether the thing deciding it does.
-
----
-
-## The watchdog: what stops a loop nobody is watching
-
-Every gate above judges ONE thing: this PR, this run, this diff. A tick is stateless
-by design, and that has a consequence which is invisible until it bites.
-
-**A process with no memory of its own actions cannot notice it is repeating itself.**
-
-The per-target lock prevents two dispatches at the same time. Nothing prevented the
-same dispatch happening 68 times in sequence, which is what happened on 2026-09-01:
-one rejected pull request re-validated every tick for three and a half hours, $17.18,
-while the rest of the queue was never reached. Every individual tick was correct. The
-pathology existed only in the sequence, and the sequence was the one thing nothing
-wrote down.
-
-So the factory keeps a diary and reads it:
-
-- **`factory/ledger.py`** — an append-only line per dispatch, settle, escalation and
-  halt. Deliberately dumb: it records, it does not judge.
-- **`factory/watchdog.py`** — runs at the top of every tick, second only to the stop
-  button, and **halts** rather than warns. Warning is what the escalation already was,
-  and the machine drove straight through it.
-
-Seven detectors, each aimed at a different shape of stuck:
-
-| detector | fires when |
-|---|---|
-| `repeat-dispatch` | one action+target 3x with no run completing, or 6x regardless |
-| `escalation-ignored` | a target is dispatched *after* being escalated to a human |
-| `all-failing` | 5 settled runs, none completed |
-| `no-progress` | 8 dispatches, none completed — a loop spread across targets |
-| `spend-cap` | more than $25 in the window |
-| `spend-without-progress` | money buying no completions |
-| `spend-blind` | WARN only: most settled runs carry no cost, so the two above are half-blind |
-
-`escalation-ignored` is the incident's root cause expressed as a **behaviour** rather
-than as a table, so it survives any future bug that produces the same effect by
-another route.
-
-**`assess()` is a pure function** of a list of events and a clock. It reads nothing and
-asks no service anything, which is what makes every detector provable:
-`factory/_test_watchdog.py` hands it synthetic histories and asserts each one fires,
-asserts a *busy, healthy* hour produces no findings at all, and replays the real
-incident from the run log. On that replay the watchdog halts at dispatch **#3**: $16.45
-of the $17.20 never spent.
-
-Both halves are then checked by things that can fail:
-
-- the detector proofs run inside `factory/_selftest.py`, so `doctor` cannot report
-  healthy machinery while the component that stops a runaway is broken;
-- `bin/audit.py` asserts the watchdog exists, that `dispatch.py` actually **calls** it,
-  and that its halt path writes the stop file — three separate claims, because "the
-  guard fired" and "the machine stopped" are different things and this project has
-  been burned by exactly that gap.
-
-**Set the thresholds high.** A false halt costs a night of throughput and is obvious in
-the morning; a missed runaway costs money continuously and looks like a working
-factory. `FACTORY_WATCH_*` tunes every threshold.
-
----
-
-## What holds a merge without stopping the work
-
-The factory decides ordinary product values rather than stopping for them — a price,
-a default, a name — and **records what it assumed.** The work is built, validated and
-waiting, and a human answers a concrete question about a running thing instead of an
-abstract one in the dark.
-
-It never decides a **judgement** value: a floor, a tolerance, a sample size, a
-deliberate defect, a required marker. Choosing one of those is tuning the judge, and a
-factory that tunes its own judge is not being checked by anything.
-
-Three things hold the auto-merge and fail nothing: a recorded assumption, a threshold
-nobody has calibrated, and **ratchet slack** — the harness asserting more than the
-floor requires, which is exactly how many assertions could be deleted with the gate
-still green.
-
-**A hold is a state, not a message.** The PR gets `factory:held`, which nothing
-dispatches and no node may leave — `factory accept <target>` archives the
-assumptions and sends it back to `open`, so the merge still happens through a full
-validation rather than by skipping one. Agreeing with a judgement is not the same as
-skipping the gate that acts on it. The first version wrote the
-explanation into a comment and set the PR to `passed`; the dispatcher merged it
-forty-five seconds later, because `passed` is what a mergeable PR is called.
+  holdout is auto-rejected first, and the validator reads the rulebook from the
+  **base branch**, so a PR cannot weaken the rules it is about to be judged by.
+- **The ratchet.** Assertion counts have a floor in a protected file, so "delete
+  the check and lower the number" is not available to the factory.
+- **The stop button.** A local file and a remote label, because they fail in
+  different places. The remote half fails closed: any error reading it counts as
+  stopped.
+- **The watchdog.** A tick has no memory, so it cannot notice it is repeating
+  itself. A ledger records every dispatch and seven detectors halt the factory on
+  the shapes of stuck. One rejected PR re-validated 68 times in three and a half
+  hours before this existed.
 
 ---
 
@@ -230,117 +160,66 @@ forty-five seconds later, because `passed` is what a mergeable PR is called.
 ```bash
 factory init          # install into this repo
 factory doctor        # the checklist. It will fail. That is it working.
-factory status        # what is in flight, what the dial is, what needs a human
-factory run implement gh:issue:4    # one lap, by hand, watching
+factory status        # what is in flight, what the dial is, what needs you
+factory run implement gh:issue:4   # one lap, by hand, watching
 factory level 1       # raise the dial (refused without the evidence)
 factory arm           # install the schedule (refused below level 1)
-factory accept gh:pr:11   # agree with a held PR's recorded assumptions
 factory halt          # the stop button
 ```
 
-And the three things `init` installs that actually RUN it, which are yours to start:
+And the three things `init` installs that actually run it:
 
 ```bash
-bash .factory/loop.sh              # the dispatcher loop. One tick a minute, forever.
-python .factory/monitor.py         # the operator watch. Prints only what you would act on.
+bash .factory/loop.sh        # the dispatcher. One tick a minute, forever.
+python .factory/monitor.py   # prints only what you would act on
+.factory/notify.sh           # where escalations go. Set one of these first:
+                             #   FACTORY_NTFY_TOPIC, FACTORY_WEBHOOK_URL
 ```
 
-`.factory/loop.sh` is a **singleton** -- it writes a pid file and refuses to start
-twice, because three copies once raced on one merge and escalated a pull request that
-had in fact merged perfectly. A stale pid file is cleared rather than obeyed.
-
-`.factory/notify.sh` is where escalations go, and `FACTORY_NOTIFY_CMD` points at it by
-default. It writes `.factory/escalations.log` first and unconditionally, then tries
-whichever of these you set, and says out loud when it could not deliver:
-
-```bash
-export FACTORY_NTFY_TOPIC=some-unguessable-name   # https://ntfy.sh, free, phone push
-export FACTORY_WEBHOOK_URL=https://hooks.slack.com/...   # or any {"text": ...} endpoint
-```
-
-**Set one of those before you leave it running.** The watchdog can halt the factory on
-its own; it cannot tell you that it did.
-
-And the three that check the factory rather than your software. Run them after editing
-anything under `factory/`.
-
-**From this repository**, where the runtime lives under `template/` and `bin/` exists:
-
-```bash
-python template/factory/_selftest.py   # the machinery's own invariants (doctor runs it too)
-python bin/audit.py                    # cross-file invariants no single file can check
-python bin/selfcheck-mutations.py      # and: would the self-test know if they broke?
-```
-
-**From a repository you installed into**, only the first one is there — `init` copies
-`factory/`, `harness/`, the workflow pack and the governance files, and deliberately
-does not copy `bin/`:
-
-```bash
-cd your-repo && python factory/_selftest.py     # or just `factory doctor`, which runs it
-```
-
-To audit an installed repo, run the auditor **from here** and point it at that repo:
-
-```bash
-python bin/audit.py --repo /path/to/your-repo
-```
-
-<!-- These paths were wrong for a while, in both directions: the block said
-     `python factory/_selftest.py` and `python bin/audit.py --repo .`, and in THIS
-     repository both of those fail -- the first because the runtime is under template/,
-     the second because `--repo .` points the auditor at a root with no factory/ in it.
-     A first command that errors is the same class of defect as a first question that
-     misparses: it is the moment somebody decides whether the rest of this is careful. -->
-
-
----
-
-## What it costs, honestly
-
-A published controlled comparison on one task: a solo agent produced a
-non-functional result in about twenty minutes for single-digit dollars; a
-planner/generator/evaluator harness where the evaluator drove the live page produced a
-working result in about six hours for roughly twenty times the cost.
-
-Twenty times the cost, for the only version that worked. **That ratio is the price of
-component 5**, and it is better to know it before the first invoice than after.
-
-Instrument tokens on day one. Cost projections for this are wrong by 10–20× in the
-same direction every time, and the only way to know what yours does is to have been
-recording from the first lap.
+Set a notification channel before you leave it running. The watchdog can halt the
+factory on its own. It cannot tell you that it did.
 
 ---
 
 ## What it does not do
 
-- **It does not push.** Filing an issue does not trigger a run. A scheduler wakes on a
-  timer, reads the state, and dispatches. An issue filed at 09:01 waits for the next
-  tick. A push trigger that breaks fails *silently* and looks exactly like a factory
-  with nothing to do; a poll that breaks is a poll you can see not running.
-- **It does not judge taste.** `MISSION.md` has a section for what is permanently
-  human — whether it feels right, looks right, reads right. A green gate never means
-  "the product is good". It means the layer a machine can check is intact.
-- **It does not own your process.** The node prompts are the personalisation layer and
-  you are meant to rewrite them. A user who recognises their own workflow in there
-  will trust it and maintain it; one who has to learn a new pipeline will not.
+**It does not push.** Filing an issue does not trigger a run. A scheduler wakes on
+a timer, reads the state, and dispatches. An issue filed at 09:01 waits for the
+next tick. A push trigger that breaks fails silently and looks exactly like a
+factory with nothing to do. A poll that breaks is a poll you can see not running.
+
+**It does not judge taste.** A green gate never means the product is good. It means
+the layer a machine can check is intact.
+
+**It does not own your process.** The node prompts in `.archon/workflows/factory/`
+are yours to rewrite. That is where your planning step and your review step go.
+
+---
+
+## Cost
+
+One published comparison, on one task: a solo agent produced a non-functional
+result in about twenty minutes for single-digit dollars. A planner, generator and
+evaluator harness where the evaluator drove the live page produced a working result
+in about six hours for roughly twenty times the cost.
+
+Twenty times, for the only version that worked. Instrument your tokens on day one.
+Projections for this are wrong by 10-20x in the same direction every time.
 
 ---
 
 ## Layout
 
 ```
-bin/factory.py     the CLI
-bin/sync-to.py         push template fixes into a repo that already installed
-bin/audit.py           cross-file invariants no single file can check alone
-template/              what init copies in
-  factory/             the runtime: dispatcher, state machine, guard, gate, merge
-  factory/_selftest.py the harness for that runtime, run by `doctor`
-  harness/             component 5's plumbing. Every assertion in it is yours to write
-  .archon/workflows/   the five workflows, their prompts and their scripts
-  .claude/skills/      the same loop, by hand -- each points at the node prompt
-                       above rather than copying it
-  MISSION.md           yours
-  FACTORY_RULES.md     nearly complete
-docs/                  the longer explanations
+bin/factory.py       the CLI
+bin/sync-to.py       push template fixes into a repo that already installed
+bin/audit.py         cross-file invariants no single file can check alone
+template/            what init copies in
+  factory/           the runtime: dispatcher, state machine, guard, gate, merge
+  factory/_selftest.py  the harness for that runtime, run by doctor
+  harness/           the gate ladder, the mutation runner, END-TO-END.md
+  .archon/workflows/ the five workflows and their prompts
+  .claude/skills/    the same loop, by hand
+docs/first-hour.md   what to do after init, in order
+docs/incidents.md    every way this has been wrong, and the mechanism each time
 ```
