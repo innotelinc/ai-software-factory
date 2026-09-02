@@ -37,11 +37,16 @@ printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$MESSAGE" >> "$LOGFILE" 2>/de
 
 delivered=""
 
+# `--fail` IS LOAD-BEARING. Without it curl exits 0 on a 4xx or 5xx, so a message
+# the server REJECTED is reported as delivered -- a false success inside the alarm,
+# which is the one place it costs the most. Measured: `curl -sS` exits 0 against a
+# URL that returns an error, `curl -sS --fail` exits 22.
+#
 # 2. ntfy.sh -- the lowest-friction way to get this on a phone. No account, no app
 #    registration; pick an unguessable topic name and subscribe to it.
 if [ -z "$delivered" ] && [ -n "${FACTORY_NTFY_TOPIC:-}" ]; then
   if command -v curl >/dev/null 2>&1; then
-    if curl -sS -m 20 -d "$MESSAGE" "https://ntfy.sh/${FACTORY_NTFY_TOPIC}" >/dev/null 2>&1; then
+    if curl -sS --fail -m 20 -d "$MESSAGE" "https://ntfy.sh/${FACTORY_NTFY_TOPIC}" >/dev/null 2>&1; then
       delivered="ntfy"
     else
       echo "NOTIFY_NTFY_FAILED topic=${FACTORY_NTFY_TOPIC}"
@@ -57,7 +62,7 @@ if [ -z "$delivered" ] && [ -n "${FACTORY_WEBHOOK_URL:-}" ]; then
     # Quote-escaped so a message containing " or \ cannot produce invalid JSON, which
     # would fail in a way that looks like the endpoint rejecting the alert.
     _payload=$(printf '%s' "$MESSAGE" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    if curl -sS -m 20 -H 'Content-Type: application/json' \
+    if curl -sS --fail -m 20 -H 'Content-Type: application/json' \
          -d "{\"text\": \"$_payload\"}" "$FACTORY_WEBHOOK_URL" >/dev/null 2>&1; then
       delivered="webhook"
     else
