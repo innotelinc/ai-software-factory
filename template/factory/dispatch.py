@@ -740,8 +740,12 @@ def main() -> int:
                     if state.linked_issue(pr["_target"]) == issue["_target"]:
                         referenced = True
                         break
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as e:  # noqa: BLE001
+                    # SAY SO. If this throws for every PR, `referenced` stays False and
+                    # an issue that IS answered by a live pull request is escalated as
+                    # abandoned. Silently taking the wrong branch of a decision is worse
+                    # than the exception that caused it.
+                    log(f"  ! could not read the issue link on {pr['_target']}: {e}")
             if not referenced:
                 escalated_here |= escalate(
                     issue["_target"],

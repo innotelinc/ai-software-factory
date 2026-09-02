@@ -63,8 +63,15 @@ def fail(target: str, reason: str) -> int:
     print(f"GATE_FAIL: {reason}", file=sys.stderr)
     try:
         state.set_state(target, "needs-human", force=True)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        # LOUD, because this label IS the state machine. If it did not stick the item
+        # keeps its old state, the dispatcher reads that on the next tick and picks the
+        # work straight back up -- the exact shape of a runaway. `needs-human.md` is
+        # written either way, so silence here left the only evidence pointing at a
+        # successful escalation.
+        print(f"ESCALATION_LABEL_FAILED {target}: {e}. The item is recorded in "
+              f"needs-human.md but its LABEL did not change, so the dispatcher may "
+              f"re-select it. Fix the label by hand.", file=sys.stderr)
 
     config.NEEDS_HUMAN.parent.mkdir(parents=True, exist_ok=True)
     with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:
@@ -73,13 +80,19 @@ def fail(target: str, reason: str) -> int:
     issue = None
     try:
         issue = state.linked_issue(target)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        # Not fatal -- a PR with no readable issue link still escalates on its own --
+        # but the issue behind it then stays `in-progress` with nothing working on it,
+        # which is the invisible-escalation case this function exists to prevent.
+        print(f"ESCALATION_ISSUE_UNKNOWN {target}: {e}. The PR is parked; the issue "
+              f"behind it was not, and may sit in-progress with nothing working on it.",
+              file=sys.stderr)
     if issue:
         try:
             state.set_state(issue, "needs-human", force=True)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            print(f"ESCALATION_LABEL_FAILED {issue}: {e}. Recorded in needs-human.md, "
+                  f"but the label did not change.", file=sys.stderr)
         with config.NEEDS_HUMAN.open("a", encoding="utf-8") as fh:
             fh.write(f"- {now()}  {issue}  (gate)  its PR {target} was blocked: {reason}\n")
 

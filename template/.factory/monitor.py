@@ -66,7 +66,10 @@ ACTIONABLE = re.compile(
     # THE ALARM WATCHES ITSELF. A notification channel that silently stopped
     # working is indistinguishable from a quiet factory, which is the whole
     # reason this file exists one layer up.
-    r"|NOTIFY_SLACK_FAILED|NOTIFY_DESKTOP_FAILED|NOTIFY_UNDELIVERED"
+    r"|NOTIFY_NTFY_FAILED|NOTIFY_WEBHOOK_FAILED|NOTIFY_DESKTOP_FAILED|NOTIFY_UNDELIVERED"
+    # An escalation whose LABEL did not stick is a runaway waiting to happen:
+    # the item keeps its old state and the dispatcher picks it straight back up.
+    r"|ESCALATION_LABEL_FAILED|ESCALATION_ISSUE_UNKNOWN"
     r"|Traceback|ModuleNotFoundError|PermissionError"
     r"|MERGED\b|MERGE_BLOCKED"
 )
