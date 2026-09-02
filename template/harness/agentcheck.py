@@ -74,7 +74,7 @@ RUNGS = {
 # --- how the agent reaches the app --------------------------------------------
 
 
-def reach(config: dict, app) -> str:
+def reach(config: dict, app, rung_noun: str = "journey") -> str:
     """Describe the ALREADY RUNNING app, in the words the agent needs.
 
     The app is started once by `ci.py` and held open for both rungs. Telling the
@@ -92,6 +92,11 @@ def reach(config: dict, app) -> str:
             f"If a step needs a restart, the start command is: {start}\n"
             f"Restart means: stop that process, run it again on the SAME port "
             f"({getattr(app, 'port', '')}), wait for the health endpoint, continue."
+            "\nTHE PORT IS NOT NEGOTIABLE. Anything started on a different port is "
+            "invisible to the gate, which then cannot re-check your evidence and "
+            "cannot stop the process afterwards."
+            f"\nThe {rung_noun}s below run IN ORDER against this one app and SHARE "
+            f"its state. Only restart when a {rung_noun} cannot be true otherwise."
         )
     if driver == "cli":
         return (
@@ -155,7 +160,7 @@ Follow these instructions exactly.
 
 --- HOW TO REACH THE APP ---
 
-{reach(config, app)}
+{reach(config, app, rung['noun'])}
 {scope}
 --- WHERE TO WRITE THE RESULT ---
 
@@ -274,7 +279,24 @@ def run_rung(kind: str, config: dict, app, only: str = "") -> tuple[int, int, li
             f"unknown is never a pass."
         )
 
-    return _validate(kind, data)
+    groups, assertions, failures = _validate(kind, data)
+
+    # AN ALL-GREEN REPORT FROM AN APP THAT IS NO LONGER THERE IS NOT EVIDENCE. The
+    # gate cannot re-check anything gathered somewhere it cannot reach, and a process
+    # left listening on another port holds it and poisons the next lap.
+    #
+    # Only checked when the report is otherwise clean. If assertions already failed,
+    # those are the finding and a dead app is a symptom of them, not a second
+    # complaint to bury the first under.
+    if not failures and _still_healthy(config, app) is False:
+        raise AgentCheckFailed(
+            f"every assertion passed, but the app is not answering at "
+            f"{getattr(app, 'base', 'the address it was given')}. A restart has to "
+            f"come back on the same port; anything else means this report describes "
+            f"an app the gate never saw."
+        )
+
+    return groups, assertions, failures
 
 
 def _still_healthy(config: dict, app) -> "bool | None":
