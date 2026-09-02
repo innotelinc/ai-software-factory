@@ -21,6 +21,10 @@ __pycache__/
 .factory/deployed.json
 .factory/deploy-history.log
 .factory/STOP
+# The singleton's pid file. Per-machine runtime state: committing it puts one
+# machine's pid in another machine's checkout, where it is at best noise and at
+# worst a number that happens to belong to something else and wedges the loop.
+.factory/loop.pid
 .factory/assumptions/
 .factory/followups/
 
