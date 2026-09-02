@@ -364,6 +364,54 @@ def check_no_freelance_writes(root: Path) -> None:
                 fail("freelance write", f"{p.relative_to(root)} contains `{pattern}` -- {why}")
 
 
+def check_loop_and_monitor_agree(root: Path) -> None:
+    """The loop must write the file the monitor reads.
+
+    THE INCIDENT: the README gives two commands, `bash .factory/loop.sh` and
+    `python .factory/monitor.py`, and they did not connect. The loop wrote to
+    stdout; the monitor tails `.factory/runs/loop.log`, which nothing created
+    unless the operator happened to redirect. Follow the documentation exactly and
+    the monitor reports "no dispatcher tick for 6 minutes" forever while the loop is
+    running perfectly.
+
+    Both components were individually correct, which is why nothing caught it. The
+    failure mode is the worst one available here: "the loop is dead" and "nobody
+    wired the log" produce identical output, and the alert that exists to tell them
+    apart is the thing that is wrong.
+    """
+    loop = root / ".factory" / "loop.sh"
+    monitor = root / ".factory" / "monitor.py"
+    if not loop.exists() or not monitor.exists():
+        return  # check_install_ships_a_runner already reports a missing one
+    mon = monitor.read_text(encoding="utf-8")
+    m = re.search(r'LOG\s*=\s*HERE\s*/\s*"([^"]+)"\s*/\s*"([^"]+)"', mon)
+    if not m:
+        fail("loop/monitor", "cannot find the log path monitor.py reads")
+        return
+    wanted = f"{m.group(1)}/{m.group(2)}"
+    src = loop.read_text(encoding="utf-8")
+    # THE ASSIGNMENT, not any occurrence. The first version searched the whole file
+    # and passed against a loop.sh pointed at a different path, because the comment
+    # explaining the wiring still contained the old one. That is the exact mistake
+    # this check's own message warns about: naming a path in a comment is not wiring
+    # it up.
+    assigned = re.search(r'^\s*LOOP_LOG=.*$', src, re.M)
+    src = assigned.group(0) if assigned else ""
+    if wanted not in src:
+        fail(
+            "loop/monitor",
+            f"monitor.py tails '{wanted}' and loop.sh never names it, so the loop "
+            f"writes nowhere the monitor can read. A watch on a file that never "
+            f"appears reports a healthy loop as dead, forever",
+        )
+    elif "tee" not in loop.read_text(encoding="utf-8"):
+        fail(
+            "loop/monitor",
+            f"loop.sh names '{wanted}' but does not write to it. Naming the path in "
+            f"a comment is not wiring it up",
+        )
+
+
 def check_agent_rungs_wired(root: Path) -> None:
     """The two agent-driven rungs exist, are reachable, and stay on the right side.
 
@@ -851,6 +899,7 @@ def main(argv: list[str]) -> int:
     check_markers(root)
     check_no_freelance_writes(root)
     check_agent_rungs_wired(root)
+    check_loop_and_monitor_agree(root)
     check_deny_lists(root)
     check_selftest_wired(root)
     check_watchdog_wired(root)

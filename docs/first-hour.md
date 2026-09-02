@@ -9,7 +9,7 @@ install. That is it working.
 
 ## 1. `MISSION.md`, and mostly its out-of-scope list
 
-Half an hour, and the highest-leverage half hour here.
+Half an hour, and the half hour that decides the most.
 
 The in-scope list is easy and you will get it roughly right first time. The
 out-of-scope list is the one that does work:

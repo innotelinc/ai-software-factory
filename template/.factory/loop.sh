@@ -18,6 +18,8 @@
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1   # the repo root, wherever it is
 
 LOCK=".factory/loop.pid"
+# Where the operator watch reads from. `.factory/monitor.py` tails exactly this.
+LOOP_LOG="${FACTORY_LOOP_LOG:-.factory/runs/loop.log}"
 INTERVAL="${FACTORY_LOOP_INTERVAL:-60}"
 
 # Escalations and watchdog halts must REACH somebody. The default is a log file.
@@ -76,6 +78,22 @@ echo $$ > "$LOCK"
 # Clear it on any exit, including a kill, so the next start is not blocked by our own
 # corpse. This is the half that makes the check above safe to be strict.
 trap 'rm -f "$LOCK"' EXIT INT TERM
+
+# THE LOOP WRITES ITS OWN LOG, because the monitor reads a FILE and this used to
+# write only to a terminal.
+#
+# The README gives two commands, `bash .factory/loop.sh` and `python
+# .factory/monitor.py`, and they did not connect: monitor.py tails
+# .factory/runs/loop.log, which nothing created unless the operator happened to
+# redirect. Follow the documentation exactly and you get a monitor watching a file
+# that never appears, reporting "no dispatcher tick for 6 minutes" forever while the
+# loop is running perfectly. Two shipped components, each correct, that did not
+# compose -- and the failure mode is the one this project cares most about, because
+# "the loop is dead" and "nobody wired the log" produce identical output.
+#
+# Still goes to stdout too, so running it in a terminal behaves as before.
+mkdir -p "$(dirname "$LOOP_LOG")"
+exec > >(tee -a "$LOOP_LOG") 2>&1
 
 echo "=== $(stamp) loop starting as pid $$ (interval ${INTERVAL}s)"
 
