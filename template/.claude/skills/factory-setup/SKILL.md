@@ -91,7 +91,16 @@ is right.
 propose yourself from the routes and commands you read. Two to five total. Name
 real values, not "returns successfully".
 
-**`.factory/holdout/HOLDOUT.md`** yourself, and do not ask. Two or three
+**Write what the product DOES, not what it should do.** A journey for behaviour
+that does not exist yet makes the gate red before the first lap has run, and a
+permanently red gate means nothing can ever merge, including the change that would
+make the journey pass. Measured: a setup run put "survive a restart" in MISSION as
+in-scope, correctly, and then wrote a restart journey against an in-memory store.
+The scope belongs in `MISSION.md`. The gap belongs in an issue. The journey file
+describes today.
+
+**`.factory/holdout/HOLDOUT.md`** yourself, and do not ask. Same rule: today's
+behaviour, not the roadmap. Two or three
 scenarios that compose several features in a sequence, use values appearing
 nowhere else in the repo, and assert exact figures worked out by hand. Do not
 reuse a journey from `END-TO-END.md`. Then say, in one line, that the person

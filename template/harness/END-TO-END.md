@@ -28,6 +28,11 @@ grep is a string it can special-case.
 **Two to five journeys is right.** More than that and you are writing a test
 suite, which is what `unit` is for.
 
+**Describe what it does today, not what it should do.** A journey for behaviour
+that does not exist yet makes the gate red before the first lap, and a permanently
+red gate means nothing merges, including the change that would make the journey
+pass. Scope goes in `MISSION.md`. A gap goes in an issue.
+
 ---
 
 <!-- SCAFFOLD_EXAMPLE_DELETE_THIS_LINE_WHEN_YOU_WRITE_YOUR_OWN -->
