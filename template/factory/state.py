@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from typing import Any
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
@@ -172,20 +173,65 @@ class GhError(RuntimeError):
     pass
 
 
-def gh(*args: str, check: bool = True, stdin: str | None = None) -> str:
-    p = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        input=stdin,
-        cwd=str(config.ROOT),
-        timeout=120,
+# Failures that mean "ask again", not "something is wrong". GitHub returns these
+# routinely and they clear in seconds.
+#
+# THE INCIDENT: a single HTTP 503 on `gh issue list` took down one tick, wrote a
+# needs-human entry and sent a notification. The very next tick, sixty seconds
+# later, succeeded. So a thirty-second blip in somebody else's service produced a
+# page and a permanent record that a human had to clear.
+#
+# That is the wrong threshold in the expensive direction. This runs unattended for
+# days; a channel that fires on every upstream hiccup is a channel people mute, and
+# a muted channel is the failure the escalation path exists to prevent.
+#
+# Deliberately NARROW. A 404, a 422, a bad token or a rejected merge are answers,
+# and retrying an answer just asks the same question three times before reporting
+# the same thing.
+_TRANSIENT = (
+    "503", "502", "504", "500",
+    "service unavailable", "bad gateway", "gateway time-out", "timeout",
+    "connection reset", "connection refused", "could not resolve host",
+    "temporarily unavailable", "try again", "eof occurred", "tls handshake",
+)
+
+
+def _is_transient(stderr: str) -> bool:
+    low = stderr.lower()
+    return any(sig in low for sig in _TRANSIENT)
+
+
+def gh(*args: str, check: bool = True, stdin: str | None = None,
+       attempts: int = 3) -> str:
+    last = None
+    for attempt in range(1, attempts + 1):
+        p = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            input=stdin,
+            cwd=str(config.ROOT),
+            timeout=120,
+        )
+        if p.returncode == 0 or not check:
+            return p.stdout
+        last = p
+        if attempt == attempts or not _is_transient(p.stderr or ""):
+            break
+        # Said out loud rather than retried silently. A command that quietly takes
+        # four seconds sometimes is a mystery later; one that says it retried is a
+        # line in the log somebody can correlate with an upstream status page.
+        print(
+            f"GH_RETRY {attempt}/{attempts - 1} after a transient failure: "
+            f"{(p.stderr or '').strip()[:160]}",
+            file=sys.stderr, flush=True,
+        )
+        time.sleep(2 * attempt)
+    raise GhError(
+        f"gh {' '.join(args)} failed ({last.returncode}): {(last.stderr or '').strip()}"
     )
-    if check and p.returncode != 0:
-        raise GhError(f"gh {' '.join(args)} failed ({p.returncode}): {p.stderr.strip()}")
-    return p.stdout
 
 
 def parse_target(target: str) -> tuple[str, str]:

@@ -1288,3 +1288,39 @@ an untracked replacement on the same port, tear down, and watch the replacement 
 symptom. The only way it surfaced was reading the process table on the way past, and
 the only reason to do that was having just written about leaked processes in another
 incident.
+
+## A thirty-second GitHub wobble wrote a needs-human entry and paged a human
+
+Caught by the operator monitor, not by anything failing: `NEEDS_HUMAN ... the
+dispatcher itself failed: gh issue list ... HTTP 503: Service Unavailable`.
+
+One tick, one 503 from GitHub's GraphQL endpoint. The dispatcher recorded a
+`DISPATCHER_FAULT`, appended to `needs-human.md`, and sent a notification. The very
+next tick, sixty seconds later, succeeded. Exactly one fault in the whole log.
+
+Every individual decision there was defensible. The dispatcher could not read the
+queue, and this system's rule is that an unknown is never a pass, so it stopped
+rather than guessing. What was wrong was the THRESHOLD: it treated a blip in
+somebody else's service as an incident on the first occurrence.
+
+**The cost is not the log line, it is the channel.** This runs unattended for days.
+A notifier that fires on every upstream hiccup is a notifier people mute, and a
+muted channel is precisely the failure the escalation path exists to prevent. It
+also leaves a permanent record a human has to clear, for something that had already
+fixed itself before anyone read it.
+
+`state.gh()` now retries a transient failure up to three times with a short backoff,
+and says `GH_RETRY` when it does rather than quietly taking four seconds. If GitHub
+is genuinely down the attempts exhaust and it escalates, which is correct.
+
+**The list is deliberately narrow, and the second direction is the one worth
+testing.** 5xx, timeouts, connection resets and DNS failures are "ask again". A 404,
+a 422, a bad token and a rejected merge are ANSWERS, and retrying an answer asks the
+same question three times before reporting the same thing, slower. The merge
+refusal is the one that would actually hurt: re-attempting a merge the base branch
+has already rejected. All four cases are pinned in `_selftest.py` and two mutations
+hold them.
+
+**Worth noting where this came from.** Nothing broke. The factory behaved exactly as
+designed, the monitor reported it exactly as designed, and the design was wrong. The
+only reason it surfaced was an alert firing on a machine nobody was watching.

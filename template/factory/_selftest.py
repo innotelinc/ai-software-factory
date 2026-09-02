@@ -934,6 +934,77 @@ def floor_reader_agreement_checks() -> None:
 # aimed at the rejections, not at the happy path: a validator that accepts
 # everything passes a happy-path test perfectly.
 
+def gh_retry_checks() -> None:
+    """A blip is retried. An answer is not.
+
+    THE INCIDENT: one HTTP 503 on `gh issue list` took down a tick, wrote a
+    needs-human entry and sent a notification. The next tick, sixty seconds later,
+    succeeded. A thirty-second wobble in somebody else's service produced a page and
+    a permanent record for a human to clear.
+
+    BOTH DIRECTIONS ARE CHECKED. A retry that never fires is decoration; a retry
+    that fires on a 404 asks the same question three times and reports the same
+    thing four seconds later. A merge refusal is the case that matters most: it is
+    an answer, and retrying it would re-attempt a merge the base branch already
+    rejected.
+    """
+    calls = {"n": 0}
+    real_run, real_sleep = state.subprocess.run, state.time.sleep
+    state.time.sleep = lambda _s: None
+    # The retry says so out loud, which is right in production and noise here --
+    # `doctor` runs this file, and a GH_RETRY line in a health report reads as a
+    # real upstream problem rather than a test exercising one.
+    import contextlib as _ctx
+    import io as _io
+    _quiet = _ctx.redirect_stderr(_io.StringIO())
+    _quiet.__enter__()
+
+    class P:
+        def __init__(self, rc, err):
+            self.returncode, self.stdout, self.stderr = rc, ("OK" if rc == 0 else ""), err
+
+    def script(seq):
+        def fake(*a, **kw):
+            i = calls["n"]; calls["n"] += 1
+            rc, err = seq[min(i, len(seq) - 1)]
+            return P(rc, err)
+        return fake
+
+    try:
+        calls["n"] = 0
+        state.subprocess.run = script([(1, "HTTP 503: Service Unavailable"), (0, "")])
+        out = state.gh("issue", "list")
+        check("a transient 503 is retried and recovers", out == "OK" and calls["n"] == 2,
+              "returned " + repr(out) + " after " + str(calls["n"]) + " attempts")
+
+        calls["n"] = 0
+        state.subprocess.run = script([(1, "HTTP 503: Service Unavailable")])
+        raised = False
+        try:
+            state.gh("issue", "list")
+        except state.GhError:
+            raised = True
+        check("a 503 that never clears still fails, after every attempt",
+              raised and calls["n"] == 3, "raised=" + str(raised) + " attempts=" + str(calls["n"]))
+
+        for label, err in (("a 404", "HTTP 404: Not Found"),
+                           ("a merge refusal", "Pull request is not mergeable")):
+            calls["n"] = 0
+            state.subprocess.run = script([(1, err)])
+            raised = False
+            try:
+                state.gh("pr", "view", "1")
+            except state.GhError:
+                raised = True
+            check(label + " is an answer and is NOT retried",
+                  raised and calls["n"] == 1,
+                  "attempts=" + str(calls["n"]) + " -- retrying an answer asks the same "
+                  "question three times and reports the same thing, slower")
+    finally:
+        _quiet.__exit__(None, None, None)
+        state.subprocess.run, state.time.sleep = real_run, real_sleep
+
+
 def teardown_frees_the_port_checks() -> None:
     """Teardown must free the PORT, not merely the process it happens to track.
 
@@ -1182,6 +1253,7 @@ def main() -> int:
     ratchet_source_checks()
     argv_quoting_checks()
     teardown_frees_the_port_checks()
+    gh_retry_checks()
 
     if FAILURES:
         if not quiet:
