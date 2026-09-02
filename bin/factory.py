@@ -399,6 +399,38 @@ def cmd_init(args: argparse.Namespace) -> int:
     hc = root / "harness" / "harness.config.json"
     if hc.exists():
         cfg = json.loads(hc.read_text(encoding="utf-8"))
+        # A DEFAULT FROM ANOTHER LANGUAGE IS WORSE THAN NO DEFAULT. The template
+        # ships Python commands, and a Node repo where detection finds no typecheck
+        # script kept `python -m compileall -q .` -- which compiles zero Python files
+        # in a JavaScript repo and exits 0. That prints STATIC_OK on a repo with no
+        # static checking at all, which is the "empty is not pass" failure this whole
+        # gate exists to prevent, shipped as a default.
+        #
+        # Blanked instead. `ci.py` reports an empty step as <STEP>_SKIPPED, loudly.
+        PY_DEFAULTS = {"python -m compileall -q .", "python -m pytest -q"}
+        if found["language"] not in ("python", "unknown"):
+            # `rung`, not `step` -- `step()` is the module-level printer and a loop
+            # variable of that name shadows it for the whole function, which surfaced
+            # 100 lines earlier as UnboundLocalError on a line nothing had touched.
+            for rung in ("static", "unit"):
+                if not found[rung] and cfg.get(rung) in PY_DEFAULTS:
+                    cfg[rung] = ""
+                    warn(
+                        f"no {rung} command found for a {found['language']} repo, and the "
+                        f"shipped default is Python. Cleared it: the rung now says "
+                        f"{rung.upper()}_SKIPPED rather than passing on nothing. Set it in "
+                        f"harness/harness.config.json."
+                    )
+            # The library driver's import check is language-specific too, and the
+            # shipped one is `python -c "import app"`.
+            probe = {
+                "node": 'node -e "require(\'./\')"',
+                "go": "go build ./...",
+                "rust": "cargo build",
+            }.get(found["language"])
+            if probe:
+                cfg.setdefault("library", {})["import_check"] = probe
+
         agent = detect_agent()
         if agent and not cfg.get("agent", {}).get("cmd"):
             cfg.setdefault("agent", {})["cmd"] = agent

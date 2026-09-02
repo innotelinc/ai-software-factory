@@ -63,9 +63,16 @@ Sort what comes back:
 > The most valuable thing someone does here looks like: *<your draft, as steps>*.
 > Is that the one, and what would you check at the end?
 
-**4. How it runs.**
+**4. How it runs, and how a test reaches it.**
 > Start: `<detected>`  ·  Tests: `<detected>`  ·  Agent: `<detected>`
+> Reached as: `<http | cli | library>`
 > Anything wrong there?
+
+The last one is the only part of question 4 you cannot read off the repo with
+certainty, and getting it wrong is expensive: `driver` ships as `http`, so a
+library with no server sits there waiting for a port that never opens. Propose the
+shape you actually see (`module.exports` and no listener means `library`) and set
+`driver` plus its config block to match.
 
 Then stop asking. If something else is genuinely undecidable, pick the safer
 option, write it down, and mention it at the end in one sentence.

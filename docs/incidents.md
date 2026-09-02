@@ -1153,3 +1153,32 @@ printed on every run: a signal to read, not a number to hold a merge against.
 **The general shape.** A ratchet needs a monotone input. Anything a model chooses per
 run is not monotone, and pinning a floor to it converts variance into a failure that
 arrives later, somewhere else, with no obvious cause.
+
+## A JavaScript repo was checked by `python -m compileall`
+
+Found by handing the README's own prompt to an agent and letting it install into a
+Node repo it had never seen.
+
+`detect()` sets `static` and `unit` from the language it finds. For a Node package with
+no `typecheck` script and no `tsconfig.json` it finds neither, so both were left at the
+values the template ships: `python -m compileall -q .` and `python -m pytest -q`.
+
+`python -m compileall -q .` in a JavaScript repo compiles zero files and exits 0. The
+gate printed `STATIC_OK` on a repository with no static checking of any kind. That is
+exactly the "empty is not pass" failure the rest of this system is built to prevent,
+shipped as a default and green from the first run.
+
+A default from another language is worse than no default. `init` now clears them and
+says so, and `ci.py` reports the rung as `STATIC_SKIPPED`, which is a fact in the log
+rather than a pass.
+
+The same run left `driver` at `http` for a library with no server, and
+`library.import_check` at `python -c "import app"` in a Node repo. The import check is
+set per language now; the driver is question 4 of the setup interview, because whether
+software is reached over HTTP, as a command, or as an import is not reliably readable.
+
+**And the fix shipped a bug of its own**, worth recording because it is a shape that
+recurs: the loop was written `for step in ("static", "unit")`, and `step()` is the
+module-level printer. The loop variable shadowed it for the whole function, so `init`
+died with `UnboundLocalError` a hundred lines earlier, on a line nothing had touched.
+Only running it found that. Reading the diff would not have.
