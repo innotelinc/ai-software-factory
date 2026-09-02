@@ -144,8 +144,24 @@ def counted(log: str, marker: str) -> int | None:
 # without a source here is a configuration error, reported rather than ignored --
 # a ratchet nobody can read is not a ratchet.
 FLOOR_SOURCES = {
-    "e2e_steps_asserted": "E2E_PASSED steps",
-    "holdout_assertions": "HOLDOUT_PASSED scenarios=%d assertions",
+    # JOURNEYS AND SCENARIOS, NOT ASSERTIONS, for the two agent-driven rungs.
+    #
+    # An agent reading END-TO-END.md decides how many assertions a journey needs, and
+    # that number moves between runs. Measured: 12 on a clean build, 13 on the next,
+    # because it noticed something odd and probed further. merge.py raises each floor
+    # to what the gate just observed, so an assertion floor would climb to the
+    # luckiest run and then fail every ordinary one -- a helpful extra check turning
+    # into a broken factory two laps later.
+    #
+    # The journey COUNT is stable, because it is the number of headings in a file
+    # that lives on the protected list. Deleting a journey is the thing this floor
+    # exists to prevent, and it is already an auto-reject; the floor is the backstop
+    # for a rung that silently stops running one.
+    #
+    # The assertion counts are still printed on every run. They are a signal to read,
+    # not a number to hold a merge against.
+    "e2e_journeys": "E2E_PASSED journeys",
+    "holdout_scenarios": "HOLDOUT_PASSED scenarios",
     "unit_tests": "UNIT_PASSED tests",
     "mutations_caught": "MUTATIONS_CAUGHT",
 }
@@ -165,10 +181,14 @@ def observed_counts(log: str, floor_keys: "list[str] | None" = None) -> dict[str
     what a harness that named its floor keys after its own markers already emits.
     """
     out: dict[str, int | None] = {
-        "e2e_steps_asserted": counted(log, "E2E_PASSED steps"),
-        "holdout_assertions": counted(log, "assertions"),
+        "e2e_journeys": counted(log, "E2E_PASSED journeys"),
+        "holdout_scenarios": counted(log, "HOLDOUT_PASSED scenarios"),
         "unit_tests": counted(log, "UNIT_PASSED tests"),
         "mutations_caught": counted(log, "MUTATIONS_CAUGHT"),
+        # Read for an install that predates the agent-driven rungs, so its floor file
+        # keeps working rather than failing as "a floor nothing measures".
+        "e2e_steps_asserted": counted(log, "E2E_PASSED steps"),
+        "holdout_assertions": counted(log, "assertions"),
     }
     for key in floor_keys or []:
         if key in out and out[key] is not None:

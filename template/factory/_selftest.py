@@ -934,6 +934,48 @@ def floor_reader_agreement_checks() -> None:
 # aimed at the rejections, not at the happy path: a validator that accepts
 # everything passes a happy-path test perfectly.
 
+def ratchet_source_checks() -> None:
+    """The floor keys read the markers the harness actually prints.
+
+    THE FAILURE THIS PINS: the agent-driven rungs' floors used to count ASSERTIONS,
+    and an agent decides how many assertions a journey needs. Measured 12 on one
+    build and 13 on the next, because it probed further after noticing something.
+    `merge.raise_floor` raises each floor to what the gate just observed, so an
+    assertion floor climbs to the luckiest run and then fails every ordinary one --
+    a helpful extra check turning into a broken factory two laps later.
+
+    Journeys and scenarios are stable: they are headings in a protected file.
+    """
+    log = ("HARNESS_START mode=full" + NL + "STATIC_OK" + NL + "UNIT_PASSED tests=30" + NL
+           + "APP_STARTED port=1" + NL + "E2E_PASSED journeys=2 steps=12" + NL
+           + "HOLDOUT_PASSED scenarios=3 assertions=14" + NL + "MUTATIONS_CAUGHT=8" + NL
+           + "GATE_OK mode=full" + NL)
+    keys = ["e2e_journeys", "holdout_scenarios", "unit_tests", "mutations_caught"]
+    obs = gate.observed_counts(log, keys)
+    for key, want in zip(keys, (2, 3, 30, 8)):
+        check("the ratchet reads " + key + " from the run log", obs.get(key) == want,
+              "got " + repr(obs.get(key)) + ", wanted " + str(want)
+              + " -- a floor nothing measures is a floor nobody is held to")
+
+    # Every floor key the template ships must have a source, or the gate reports
+    # "a floor nothing measures" on a fresh install and the ratchet is off from day
+    # one while looking configured.
+    import json as _json
+    floor_file = Path(__file__).resolve().parent.parent / ".factory" / "locks" / "floor.json"
+    if floor_file.exists():
+        raw = _json.loads(floor_file.read_text(encoding="utf-8"))
+        shipped = [k for k, v in raw.items()
+                   if isinstance(v, int) and not k.startswith("_") and not k.endswith("_MAX")]
+        for key in shipped:
+            check("the shipped floor key " + key + " has a marker to read",
+                  key in gate.FLOOR_SOURCES or obs.get(key) is not None
+                  or key in gate.observed_counts(log, [key]),
+                  "no source, so the gate cannot enforce it")
+        check("the shipped floors do not count agent-chosen assertions",
+              "e2e_steps_asserted" not in shipped and "holdout_assertions" not in shipped,
+              "an assertion floor plus an auto-raise ratchet climbs to the luckiest run")
+
+
 def agentcheck_checks() -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
     try:
@@ -1065,6 +1107,7 @@ def main() -> int:
     assumption_count_checks()
     floor_reader_agreement_checks()
     agentcheck_checks()
+    ratchet_source_checks()
 
     if FAILURES:
         if not quiet:

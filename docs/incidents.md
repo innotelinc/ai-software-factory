@@ -1110,3 +1110,37 @@ believing it: app alive means the agent's environment is at fault and it is name
 `e2e-harness`; app dead means the product is at fault and it stays a failed assertion.
 Both branches fail the gate, so there is nothing to be gained by claiming to be
 blocked. Only the name moves, and it moves on evidence the harness gathered itself.
+
+## The ratchet would have climbed to the luckiest run
+
+Found by planting a defect in a clean room and watching the agent-driven rung catch it.
+
+The defect capped `/stats` total at four. All 30 unit tests passed, because none of
+them uses five tasks. The journey agent ran the two journeys as written, and then went
+further on its own:
+
+```
+observed: DEFECT. stats.total saturates at 4. At 3 tasks GET /stats -> total 3
+(correct). Added 2 more: GET /tasks returned 5 task objects but GET /stats ->
+{"total": 4, ...} -- total undercounts by 1. Added a 6th: still 4. The journey as
+written only ever holds 1 task, so steps 3 and 5 pass and hide this.
+```
+
+That is the whole argument for prose over a script, in one paragraph. A scripted
+end-to-end with those exact steps would have passed.
+
+**And it broke the ratchet.** That run reported 13 assertions. The clean run before it
+reported 12, because the agent had no reason to go looking. `merge.raise_floor` raises
+each floor to what the gate just observed, so an assertion floor climbs to whichever
+run was most thorough and then fails every ordinary one after it. A helpful extra check
+turns into a factory that stops merging, two laps later, for a reason nobody would
+connect to it.
+
+**The fix is to ratchet what a human controls.** The floors for these two rungs count
+JOURNEYS and SCENARIOS, which are headings in a file on the protected list, so the
+number is stable and deleting one is already an auto-reject. Assertion counts are still
+printed on every run: a signal to read, not a number to hold a merge against.
+
+**The general shape.** A ratchet needs a monotone input. Anything a model chooses per
+run is not monotone, and pinning a floor to it converts variance into a failure that
+arrives later, somewhere else, with no obvious cause.

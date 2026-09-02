@@ -102,6 +102,14 @@ DEFECTS = [
      "    if not groups:", "    if False:", True),
     ("no configured agent becomes a skip", "harness/agentcheck.py",
      "    if not cmd.strip():", "    if False:", True),
+    # THE RATCHET'S SOURCES. A floor whose marker nobody prints is a floor nobody is
+    # held to, and it looks configured the whole time.
+    ("a floor key names a marker the harness never prints", "factory/gate.py",
+     '"e2e_journeys": counted(log, "E2E_PASSED journeys"),',
+     '"e2e_journeys": counted(log, "E2E_PASSED nothing"),', True),
+    ("the shipped floor counts agent-chosen assertions again",
+     ".factory/locks/floor.json",
+     '"e2e_journeys": 0,', '"e2e_steps_asserted": 0,', True),
 ]
 
 
