@@ -938,8 +938,8 @@ def ratchet_source_checks() -> None:
     """The floor keys read the markers the harness actually prints.
 
     THE FAILURE THIS PINS: the agent-driven rungs' floors used to count ASSERTIONS,
-    and an agent decides how many assertions a journey needs. Measured 12 on one
-    build and 13 on the next, because it probed further after noticing something.
+    and an agent decides how many assertions a journey needs. Measured on the SAME
+    unchanged code: 12, then 13.
     `merge.raise_floor` raises each floor to what the gate just observed, so an
     assertion floor climbs to the luckiest run and then fails every ordinary one --
     a helpful extra check turning into a broken factory two laps later.

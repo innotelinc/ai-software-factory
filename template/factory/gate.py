@@ -147,8 +147,8 @@ FLOOR_SOURCES = {
     # JOURNEYS AND SCENARIOS, NOT ASSERTIONS, for the two agent-driven rungs.
     #
     # An agent reading END-TO-END.md decides how many assertions a journey needs, and
-    # that number moves between runs. Measured: 12 on a clean build, 13 on the next,
-    # because it noticed something odd and probed further. merge.py raises each floor
+    # that number moves between runs. Measured on the SAME unchanged code: 12, then 13.
+    # merge.py raises each floor
     # to what the gate just observed, so an assertion floor would climb to the
     # luckiest run and then fail every ordinary one -- a helpful extra check turning
     # into a broken factory two laps later.

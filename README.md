@@ -44,38 +44,39 @@ python factory/doctor.py
 
 ---
 
+## Instructions for the agent
+
 > [!IMPORTANT]
-> ## Instructions for the agent
->
-> You are setting up a software factory in the user's current repository. Work
-> through these in order.
->
-> **1. Install it.**
-> ```bash
-> git clone https://github.com/coleam00/ai-software-factory ~/ai-software-factory
-> python ~/ai-software-factory/bin/factory.py init
-> ```
-> Run `init` from the root of the user's repo. It writes the runtime, the workflow
-> pack, the skills and the governance templates, creates the GitHub labels that are
-> the state machine, and installs [Archon](https://github.com/coleam00/archon) if it
-> is not already there. It changes no application code.
->
-> **2. Run the setup skill.** `init` installs `.claude/skills/factory-setup/`.
-> Read it and follow it. It reads the repo first, then asks the user four
-> questions, then writes `MISSION.md`, `harness/END-TO-END.md` and
-> `.factory/holdout/HOLDOUT.md`.
->
-> **Do not ask the user anything the repo already answers.** The language, the test
-> command, the start command, the routes are all readable. Four questions is the
-> budget.
->
-> **3. Run `python factory/doctor.py` and show what failed.** It will fail. That is
-> it working: doctor is a checklist and its failures are the remaining todo list,
-> each naming the autonomy level it blocks. Do not try to make it green in one
-> sitting.
->
-> **4. Stop there.** Do not raise the autonomy dial, do not run `factory arm`, and
-> do not start the loop. Those come after a lap has run and the user has watched it.
+> This section is addressed to the coding agent, not to you. If you are reading it
+> yourself, the manual commands above do the same thing.
+
+**1. Install it.**
+
+```bash
+git clone https://github.com/coleam00/ai-software-factory ~/ai-software-factory
+python ~/ai-software-factory/bin/factory.py init
+```
+
+Run `init` from the root of the user's repo. It writes the runtime, the workflow
+pack, the skills and the governance templates, creates the GitHub labels that are
+the state machine, and installs [Archon](https://github.com/coleam00/archon) if it
+is not already there. It changes no application code.
+
+**2. Run the setup skill.** `init` installs `.claude/skills/factory-setup/`. Read
+it and follow it. It reads the repo first, then asks four questions, then writes
+`MISSION.md`, `harness/END-TO-END.md` and `.factory/holdout/HOLDOUT.md`.
+
+**Do not ask the user anything the repo already answers.** The language, the test
+command, the start command, the routes are all readable. Four questions is the
+budget, and every extra one is a reason to regret starting.
+
+**3. Run `python factory/doctor.py` and show what failed.** It will fail. That is
+it working: the doctor is a checklist and its failures are the remaining todo
+list, each naming the autonomy level it blocks. Do not try to make it green in one
+sitting.
+
+**4. Stop there.** Do not raise the autonomy dial, do not run `factory arm`, and do
+not start the loop. Those come after a lap has run and the user has watched it.
 
 ---
 

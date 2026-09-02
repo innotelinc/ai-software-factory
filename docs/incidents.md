@@ -1129,8 +1129,17 @@ written only ever holds 1 task, so steps 3 and 5 pass and hide this.
 That is the whole argument for prose over a script, in one paragraph. A scripted
 end-to-end with those exact steps would have passed.
 
-**And it broke the ratchet.** That run reported 13 assertions. The clean run before it
-reported 12, because the agent had no reason to go looking. `merge.raise_floor` raises
+**And it broke the ratchet.** Three clean runs of the same unchanged code:
+
+| run | journeys | e2e assertions | scenarios | holdout assertions |
+|---|---|---|---|---|
+| 1 | 2 | 12 | 2 | 14 |
+| 2 | 2 | 13 | 2 | 11 |
+| 3 | 2 | 13 | 2 | 11 |
+
+The group counts do not move. The assertion counts do, by up to three, on code that
+did not change. A floor raised to 14 fails the very next run at 11.
+`merge.raise_floor` raises
 each floor to what the gate just observed, so an assertion floor climbs to whichever
 run was most thorough and then fails every ordinary one after it. A helpful extra check
 turns into a factory that stops merging, two laps later, for a reason nobody would
