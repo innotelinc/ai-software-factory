@@ -112,6 +112,8 @@ DEFECTS = [
     ("only argv[0] gets its quotes stripped again", "harness/appproc.py",
      "    parts = [unquote(t) for t in shlex.split(cmd, posix=False)]",
      "    parts = shlex.split(cmd, posix=False)", True),
+    ("teardown stops freeing the port", "harness/appproc.py",
+     "        self._free_the_port()", "        pass", True),
     ("the gate ladder stops unquoting its arguments", "harness/ci.py",
      "    argv = [unquote(t) for t in argv]", "    argv = list(argv)", True),
     ("the shipped floor counts agent-chosen assertions again",

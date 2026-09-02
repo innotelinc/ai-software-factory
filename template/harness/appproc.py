@@ -33,6 +33,7 @@ The universal parts, kept in one place because getting them wrong is subtle:
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import socket
@@ -107,7 +108,6 @@ class HttpApp:
         cmd = (self.cfg.get("start") or "").replace("{port}", str(self.port))
         if not cmd:
             raise AppDidNotStart("driver=http but http.start is empty in harness.config.json")
-        import os
 
         merged = {**(self.cfg.get("env") or {}), **self.env_overrides}
         env = None
@@ -129,6 +129,57 @@ class HttpApp:
                 self.proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+        self._free_the_port()
+
+    def _free_the_port(self) -> None:
+        """Kill whatever is still listening, even if this object did not start it.
+
+        Killing `self.proc` frees the port only when the process on it is the one
+        this object spawned. A journey may restart the app, and that replacement is
+        untracked: the original dies, the agent's copy keeps the port, `__exit__`
+        terminates a corpse, and the next lap gets `[Errno 10048] address already in
+        use` from a factory that thinks it tore everything down.
+
+        Measured after a morning of gate runs: four orphaned interpreters holding
+        four ports, on the exact class of leak the teardown comment already warned
+        about.
+
+        Best effort by design. This runs during teardown, on every path including a
+        failure, and a port that cannot be freed must not turn a reported failure
+        into a traceback about cleanup.
+        """
+        if not self.port:
+            return
+        try:
+            if os.name == "nt":
+                out = subprocess.run(
+                    ["netstat", "-ano"], capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=30,
+                ).stdout
+                pids = {
+                    line.split()[-1]
+                    for line in out.splitlines()
+                    if f":{self.port} " in line and "LISTENING" in line
+                }
+                for pid in pids:
+                    if pid.isdigit() and pid != "0" and (
+                        not self.proc or str(self.proc.pid) != pid
+                    ):
+                        subprocess.run(["taskkill", "/PID", pid, "/F"],
+                                       capture_output=True, timeout=30)
+            else:
+                out = subprocess.run(
+                    ["lsof", "-ti", f"tcp:{self.port}"], capture_output=True,
+                    text=True, timeout=30,
+                ).stdout
+                for pid in out.split():
+                    if pid.isdigit() and (not self.proc or str(self.proc.pid) != pid):
+                        subprocess.run(["kill", "-9", pid], capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            # Named, not swallowed: a port left held is a real cost on the next lap,
+            # and silence here is how it becomes a mystery instead of a line in a log.
+            print(f"PORT_NOT_FREED {self.port} - something may still be listening",
+                  flush=True)
 
     def _await_health(self) -> None:
         path = self.cfg.get("health_path", "/health")

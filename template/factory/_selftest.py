@@ -934,6 +934,36 @@ def floor_reader_agreement_checks() -> None:
 # aimed at the rejections, not at the happy path: a validator that accepts
 # everything passes a happy-path test perfectly.
 
+def teardown_frees_the_port_checks() -> None:
+    """Teardown must free the PORT, not merely the process it happens to track.
+
+    THE LEAK: a journey may restart the app, and that replacement is untracked.
+    The original dies, the replacement keeps the port, `__exit__` terminates a
+    corpse, and the next lap gets "address already in use" from a factory that
+    believes it tore everything down. Measured after one morning of gate runs: four
+    orphaned interpreters holding four ports.
+
+    Checked at the source, because proving it properly needs a real process on a
+    real port and this file is deliberately offline and fast. The behaviour itself
+    was verified once by hand, against a deliberate impostor.
+    """
+    src_path = Path(__file__).resolve().parent.parent / "harness" / "appproc.py"
+    if not src_path.exists():
+        check("harness/appproc.py exists", False, "there is no process driver")
+        return
+    src = src_path.read_text(encoding="utf-8")
+    body = src.split("def __exit__", 1)[-1].split("def _free_the_port", 1)[0]
+    check("HttpApp teardown frees the port, not just its own process",
+          "_free_the_port" in body,
+          "__exit__ kills self.proc only, so a replacement started by a journey "
+          "keeps the port and the next lap cannot bind it")
+    check("the port sweep exists", "def _free_the_port" in src)
+    check("the port sweep does not kill the process it already terminated",
+          "self.proc.pid" in src.split("def _free_the_port", 1)[-1],
+          "without the exclusion it re-kills its own pid, which is harmless but "
+          "means the guard was never really aimed at the impostor")
+
+
 def argv_quoting_checks() -> None:
     """A quoted argument must reach the program unquoted.
 
@@ -1151,6 +1181,7 @@ def main() -> int:
     agentcheck_checks()
     ratchet_source_checks()
     argv_quoting_checks()
+    teardown_frees_the_port_checks()
 
     if FAILURES:
         if not quiet:

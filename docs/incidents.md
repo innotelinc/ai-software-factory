@@ -1262,3 +1262,29 @@ AGENT_RUNNING rung=holdout cmd=claude
 **Worth noting about the sequence.** The over-strict version was written to close a
 real hole, in the same sitting, and it looked obviously correct in the diff. One run
 against a real agent was what separated them.
+
+## Four orphaned processes holding four ports
+
+Found by looking at the process table after a morning of gate runs, not by anything
+failing.
+
+`HttpApp.__exit__` terminated `self.proc`, which frees the port only when the process
+on it is the one this object spawned. A journey may restart the app, and the
+replacement is untracked: the original dies, the replacement keeps the port, teardown
+terminates a corpse, and everything reports clean.
+
+Nothing broke yet because every run picks a fresh dynamic port. The bill arrives later,
+as `[Errno 10048] address already in use` on a machine that has been running laps for a
+week, from a factory that believes it tore everything down. The file's own module
+docstring already said *"TEAR DOWN on every path including failure, or a leaked process
+holds the port and poisons the next lap"*, and the code freed a process rather than a
+port.
+
+Teardown now sweeps whatever is listening, excluding the pid it already terminated.
+Verified against a deliberate impostor: start the app, kill the tracked process, start
+an untracked replacement on the same port, tear down, and watch the replacement die.
+
+**Why this one is worth writing down.** It produced no failure, no log line and no
+symptom. The only way it surfaced was reading the process table on the way past, and
+the only reason to do that was having just written about leaked processes in another
+incident.
