@@ -25,17 +25,50 @@ export FACTORY_NOTIFY_CMD="${FACTORY_NOTIFY_CMD:-bash .factory/notify.sh}"
 
 mkdir -p .factory/runs
 
+# PORTABILITY, resolved once at start rather than per tick.
+#
+# `timeout` is GNU coreutils and macOS does not ship it; Homebrew installs it as
+# `gtimeout`. With neither, the loop runs WITHOUT a per-tick cap, which is the right
+# trade: the cap stops one wedged tick stalling the loop, and refusing to start has
+# already stalled it permanently.
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT="timeout 900"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT="gtimeout 900"
+else
+  TIMEOUT=""
+  echo "NOTE: no timeout/gtimeout on PATH, so a wedged tick will not be capped."
+  echo "      brew install coreutils   gets you gtimeout."
+fi
+
+# macOS has shipped python3 without a bare `python` since Monterey. Without this the
+# tick reports "command not found" once a minute and the loop looks alive while doing
+# nothing whatsoever.
+if command -v python >/dev/null 2>&1; then
+  PY="python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  echo "REFUSING TO START: neither python nor python3 is on PATH."
+  exit 4
+fi
+
+# `date -Is` is GNU. BSD date rejects -I, so on macOS every log line below -- including
+# the one announcing the loop started -- would be an error message. This spelling is
+# understood by both and matches what the rest of the factory writes.
+stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
 if [ -f "$LOCK" ]; then
   OTHER="$(cat "$LOCK" 2>/dev/null)"
   # A STALE PID FILE MUST NOT WEDGE THE LOOP FOREVER. The common way this file is left
   # behind is the machine dying, which is exactly when you need the loop to come back
   # on its own. So a pid that is gone is cleared rather than obeyed.
   if [ -n "$OTHER" ] && kill -0 "$OTHER" 2>/dev/null; then
-    echo "=== $(date -Is) REFUSING TO START: loop already running as pid $OTHER"
+    echo "=== $(stamp) REFUSING TO START: loop already running as pid $OTHER"
     echo "    Stop it first, or remove $LOCK if you are certain it is dead."
     exit 3
   fi
-  echo "=== $(date -Is) clearing stale $LOCK (pid ${OTHER:-unknown} is gone)"
+  echo "=== $(stamp) clearing stale $LOCK (pid ${OTHER:-unknown} is gone)"
   rm -f "$LOCK"
 fi
 
@@ -44,14 +77,14 @@ echo $$ > "$LOCK"
 # corpse. This is the half that makes the check above safe to be strict.
 trap 'rm -f "$LOCK"' EXIT INT TERM
 
-echo "=== $(date -Is) loop starting as pid $$ (interval ${INTERVAL}s)"
+echo "=== $(stamp) loop starting as pid $$ (interval ${INTERVAL}s)"
 
 while true; do
   if [ -f .factory/STOP ]; then
-    echo "=== $(date -Is) STOP file present, loop exiting"
+    echo "=== $(stamp) STOP file present, loop exiting"
     break
   fi
-  echo "=== $(date -Is) tick"
-  timeout 900 python factory/dispatch.py 2>&1
+  echo "=== $(stamp) tick"
+  $TIMEOUT "$PY" factory/dispatch.py 2>&1
   sleep "$INTERVAL"
 done
