@@ -1249,6 +1249,16 @@ So the rung puts the app back rather than complaining about it, and only a failu
 RESTART is a failure. It is still named `e2e-harness` rather than `e2e`, because a
 harness that cannot get the app back is not a broken product.
 
+Confirmed on the next run, which reproduced the same end state and handled it:
+
+```
+AGENT_RUNNING rung=e2e cmd=claude
+APP_DOWN_AFTER_RUNG restarting it for the next one
+APP_STARTED port=54373
+E2E_PASSED journeys=2 steps=12
+AGENT_RUNNING rung=holdout cmd=claude
+```
+
 **Worth noting about the sequence.** The over-strict version was written to close a
 real hole, in the same sitting, and it looked obviously correct in the diff. One run
 against a real agent was what separated them.
