@@ -988,3 +988,28 @@ and the pointer are the same claim recorded twice, and only one path updated bot
 and each line is defensible; the faults are in what the sequence LEAVES BEHIND, which
 only running it can show. A recovery path that has never been executed is not a recovery
 path, it is a plan -- and the day you find out is the day you needed it.
+
+
+## The alarm reported success for messages the server rejected
+
+Written hours after the incident above, while removing exactly this pattern from
+everything else.
+
+`.factory/notify.sh` announced `NOTIFIED via ntfy` whenever curl exited 0. `curl -sS`
+returns 0 on a 4xx or 5xx -- it only reports transport failures, not HTTP ones -- so a
+message the server REJECTED was reported as delivered. Measured: `curl -sS` against a
+URL that errors exits 0; `curl -sS --fail` exits 22.
+
+The cost is asymmetric in the worst direction. This is the escalation channel: the one
+component whose entire job is to tell a human something went wrong. A false success here
+does not degrade the system, it removes the last thing standing between a stopped
+factory and nobody knowing.
+
+**It was verified the wrong way, too.** The first check ran the script, read
+`NOTIFIED via ntfy`, and concluded the path worked. That is trusting the thing under
+test to report on itself. The honest check polls the message back OFF ntfy and compares
+it, which is what finally showed the delivery was not happening.
+
+**The rule.** When a component reports its own success, the test must observe the
+EFFECT somewhere else. `exit 0` is a claim, and for anything that crosses a network it
+is a claim about the local end only.
